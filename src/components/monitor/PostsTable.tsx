@@ -25,6 +25,14 @@ function metricColumns(platform: Platform): MetricCol[] {
   }
 }
 
+/** 24 小時制、與地區無關的固定格式 YYYY-MM-DD HH:mm（本地時區） */
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export function PostsTable({
   posts,
   population,
@@ -38,17 +46,17 @@ export function PostsTable({
   return (
     <div className="overflow-auto max-h-[70vh]">
       <table className="w-full text-left no-border-table">
-        <thead className="sticky top-0 z-10 bg-surface-container text-[10px] font-black text-on-surface-variant uppercase tracking-widest">
+        <thead className="sticky top-0 z-10 bg-surface-container text-[10px] font-black text-on-surface-variant/60 uppercase tracking-widest">
           <tr>
-            <th className="px-8 py-3.5 w-20">排名</th>
-            <th className="px-6 py-3.5 whitespace-nowrap">發布時間</th>
-            <th className="px-6 py-3.5">帳號</th>
-            <th className="px-6 py-3.5">內容摘要</th>
+            <th className="px-3 py-3.5 w-10 text-center">#</th>
+            <th className="px-3 py-3.5 whitespace-nowrap">時間</th>
+            <th className="px-3 py-3.5">帳號</th>
+            <th className="px-3 py-3.5">內容摘要</th>
             {cols.map((c) => (
               <th key={c.label} className="px-4 py-3.5 text-center whitespace-nowrap">{c.label}</th>
             ))}
-            <th className="px-4 py-3.5 text-center">媒體</th>
-            <th className="px-8 py-3.5 text-right">連結</th>
+            <th className="px-3 py-3.5 text-center">媒體</th>
+            <th className="px-4 py-3.5 text-right">連結</th>
           </tr>
         </thead>
         <tbody className="text-[13px] divide-y divide-outline-variant/5">
@@ -63,32 +71,37 @@ export function PostsTable({
             const anomaly = isAnomaly(p.engagementTotal ?? 0, population);
             return (
               <tr key={p.postUrl ?? i} className="table-row-hover transition-colors">
-                <td className="px-8 py-3.5">
-                  <div className="flex items-center gap-3">
+                {/* 排名：弱化為灰階小字，僅保留爆款紅點 */}
+                <td className="px-3 py-3.5">
+                  <div className="flex items-center gap-1.5">
                     <span
                       className={`w-1.5 h-1.5 rounded-full shrink-0 ${anomaly ? 'bg-sentiment-neg' : 'bg-transparent'}`}
                       title={anomaly ? '爆款 (+2σ)' : undefined}
                     />
-                    <span className="font-black text-primary">{String(i + 1).padStart(2, '0')}</span>
+                    <span className="text-xs font-medium tabular-nums text-on-surface-variant/40">{i + 1}</span>
                   </div>
                 </td>
-                <td className="px-6 py-3.5 text-on-surface-variant/80 whitespace-nowrap">
-                  {new Date(p.postTime).toLocaleString()}
+                {/* 時間：24h、小字、弱化 */}
+                <td className="px-3 py-3.5 text-xs text-on-surface-variant/60 whitespace-nowrap tabular-nums">
+                  {fmtTime(p.postTime)}
                 </td>
-                <td className="px-6 py-3.5 font-bold whitespace-nowrap">{p.username}</td>
-                <td className="px-6 py-3.5 max-w-[220px] truncate text-on-surface-variant">{p.content}</td>
+                {/* 帳號：弱化字重 + 截斷，不搶焦點 */}
+                <td className="px-3 py-3.5 max-w-[120px] truncate text-on-surface-variant/80">{p.username}</td>
+                {/* 內容 */}
+                <td className="px-3 py-3.5 max-w-[200px] truncate text-on-surface-variant">{p.content}</td>
+                {/* 互動維度：焦點 */}
                 {cols.map((c) => (
                   <td
                     key={c.label}
-                    className={`px-4 py-3.5 text-center ${
-                      c.primary ? 'font-extrabold text-primary' : 'text-on-surface-variant'
+                    className={`px-4 py-3.5 text-center tabular-nums ${
+                      c.primary ? 'font-extrabold text-primary text-[15px]' : 'text-on-surface'
                     }`}
                   >
                     {(c.get(p) ?? 0).toLocaleString()}
                   </td>
                 ))}
-                <td className="px-4 py-3.5 text-center text-on-surface-variant">{p.mediaType}</td>
-                <td className="px-8 py-3.5 text-right">
+                <td className="px-3 py-3.5 text-center text-on-surface-variant/70">{p.mediaType}</td>
+                <td className="px-4 py-3.5 text-right">
                   {p.postUrl && (
                     <a className="text-primary font-bold hover:underline" href={p.postUrl} target="_blank" rel="noreferrer">
                       查看
