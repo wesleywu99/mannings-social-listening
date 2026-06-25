@@ -1,19 +1,28 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { Post, Platform } from '@/lib/domain/types';
+import type { Scope } from '@/lib/ai/types';
 import { metricColumns, fmtTime } from './columns';
+import { AIText } from './aiText';
 
 export function PostDetailModal({
   post,
   platform,
+  scope,
   onClose,
 }: {
   post: Post | null;
   platform: Platform;
+  scope: Scope;
   onClose: () => void;
 }) {
+  const [insight, setInsight] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
     if (!post) return;
+    setInsight(null);            // 換貼文時清掉舊解讀
+    setLoading(false);
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -21,6 +30,23 @@ export function PostDetailModal({
 
   if (!post) return null;
   const cols = metricColumns(platform);
+
+  const runInsight = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/insight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post, scope }),
+      });
+      const data = await res.json();
+      setInsight(data.insight ?? data.error ?? '（無法產生解讀）');
+    } catch (e) {
+      setInsight('發生錯誤：' + String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" onClick={onClose}>
@@ -70,11 +96,30 @@ export function PostDetailModal({
           </div>
         </div>
 
-        {/* 關閉 */}
-        <div className="px-7 py-4 flex justify-end border-t border-outline-variant/10">
+        {/* AI 解讀結果 */}
+        {(insight || loading) && (
+          <div className="px-7 py-5 border-t border-outline-variant/20 max-h-[30vh] overflow-y-auto">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-ai-highlight mb-2">✨ AI 解讀</div>
+            {loading ? (
+              <div className="text-sm text-on-surface-variant/60">分析中…</div>
+            ) : (
+              <div className="text-sm text-on-surface leading-relaxed"><AIText text={insight!} /></div>
+            )}
+          </div>
+        )}
+
+        {/* 動作列 */}
+        <div className="px-7 py-4 flex justify-between items-center border-t border-outline-variant/10">
+          <button
+            onClick={runInsight}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-ai-highlight text-on-primary text-sm font-bold hover:bg-ai-hover transition-colors disabled:opacity-50"
+          >
+            ✨ {insight ? '重新解讀' : 'AI 解讀'}
+          </button>
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-primary text-on-primary text-sm font-bold hover:opacity-90 transition-opacity"
+            className="px-5 py-2 rounded-xl bg-surface-container text-on-surface text-sm font-bold hover:bg-outline-variant/30 transition-colors"
           >
             關閉
           </button>

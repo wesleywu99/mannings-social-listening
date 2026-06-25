@@ -6,7 +6,9 @@ import { PlatformTabs } from './PlatformTabs';
 import { KpiRow } from './KpiRow';
 import { PostsTable } from './PostsTable';
 import { DateRangePicker } from './DateRangePicker';
+import { ChatWidget } from './ChatWidget';
 import { DEFAULT_BRAND } from '@/lib/config';
+import type { Scope } from '@/lib/ai/types';
 
 export function MonitorClient() {
   const [brands, setBrands] = useState<BrandRow[]>([]);
@@ -49,6 +51,13 @@ export function MonitorClient() {
   const population = posts.map((p) => p.engagementTotal ?? 0);
   const ownTotal = kpis.reduce((sum, k) => sum + k.totalEngagement, 0);
 
+  const scope: Scope = {
+    brand,
+    platform,
+    dateStart: start ? `${start}T00:00:00` : undefined,
+    dateEnd: end ? `${end}T23:59:59` : undefined,
+  };
+
   return (
     <div className="space-y-10">
       <div className="flex items-center justify-end">
@@ -78,9 +87,11 @@ export function MonitorClient() {
               {loading && ' · 載入中…'}
             </span>
           </div>
-          <PostsTable posts={posts} population={population} platform={platform} />
+          <PostsTable posts={posts} population={population} platform={platform} scope={scope} />
         </div>
       </section>
+
+      <ChatWidget scope={scope} />
     </div>
   );
 }

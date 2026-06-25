@@ -4,6 +4,7 @@ import { isAnomaly } from '@/lib/domain/engagement';
 import type { Post, Platform } from '@/lib/domain/types';
 import { metricColumns, fmtTime } from './columns';
 import { PostDetailModal } from './PostDetailModal';
+import type { Scope } from '@/lib/ai/types';
 
 const TIME_KEY = 'Post Time';
 
@@ -11,10 +12,12 @@ export function PostsTable({
   posts,
   population,
   platform,
+  scope,
 }: {
   posts: Post[];
   population: number[];
   platform: Platform;
+  scope: Scope;
 }) {
   const [selected, setSelected] = useState<Post | null>(null);
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'Engagement', dir: 'desc' });
@@ -140,7 +143,7 @@ export function PostsTable({
         </table>
       </div>
 
-      <PostDetailModal post={selected} platform={platform} onClose={() => setSelected(null)} />
+      <PostDetailModal post={selected} platform={platform} scope={scope} onClose={() => setSelected(null)} />
     </>
   );
 }
