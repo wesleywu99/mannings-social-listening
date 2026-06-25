@@ -24,7 +24,7 @@ export function MonitorClient() {
 
   useEffect(() => {
     setLoading(true);
-    const qs = new URLSearchParams({ brand, platform });
+    const qs = new URLSearchParams({ brand, platform, limit: '500' });
     Promise.all([
       fetch(`/api/data/posts?${qs}`).then((r) => r.json()),
       fetch(`/api/data/kpis?brand=${encodeURIComponent(brand)}`).then((r) => r.json()),
