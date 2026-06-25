@@ -43,6 +43,8 @@ export function PostsTable({
   platform: Platform;
 }) {
   const cols = metricColumns(platform);
+  const showMedia = platform !== 'fb';   // FB 媒體型別恆為 'post'，無意義 → 隱藏
+  const emptyColSpan = 4 + cols.length + (showMedia ? 1 : 0) + 1;
   return (
     <div className="overflow-auto max-h-[70vh]">
       <table className="w-full text-left no-border-table">
@@ -55,14 +57,14 @@ export function PostsTable({
             {cols.map((c) => (
               <th key={c.label} className="px-4 py-3.5 text-center whitespace-nowrap">{c.label}</th>
             ))}
-            <th className="px-3 py-3.5 text-center">媒體</th>
+            {showMedia && <th className="px-3 py-3.5 text-center">媒體</th>}
             <th className="px-4 py-3.5 text-right">連結</th>
           </tr>
         </thead>
         <tbody className="text-[13px] divide-y divide-outline-variant/5">
           {posts.length === 0 && (
             <tr>
-              <td colSpan={cols.length + 6} className="px-8 py-16 text-center text-on-surface-variant/50">
+              <td colSpan={emptyColSpan} className="px-8 py-16 text-center text-on-surface-variant/50">
                 此視角暫無資料
               </td>
             </tr>
@@ -100,7 +102,9 @@ export function PostsTable({
                     {(c.get(p) ?? 0).toLocaleString()}
                   </td>
                 ))}
-                <td className="px-3 py-3.5 text-center text-on-surface-variant/70">{p.mediaType}</td>
+                {showMedia && (
+                  <td className="px-3 py-3.5 text-center text-on-surface-variant/70">{p.mediaType}</td>
+                )}
                 <td className="px-4 py-3.5 text-right">
                   {p.postUrl && (
                     <a className="text-primary font-bold hover:underline" href={p.postUrl} target="_blank" rel="noreferrer">
