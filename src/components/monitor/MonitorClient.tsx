@@ -51,9 +51,9 @@ export function MonitorClient() {
   const population = posts.map((p) => p.engagementTotal ?? 0);
   const ownTotal = kpis.reduce((sum, k) => sum + k.totalEngagement, 0);
 
+  // chat / 解讀 共用範圍：以 brand + 日期為硬性篩選；platform 不鎖（讓 AI 跨平台分析）
   const scope: Scope = {
     brand,
-    platform,
     dateStart: start ? `${start}T00:00:00` : undefined,
     dateEnd: end ? `${end}T23:59:59` : undefined,
   };

@@ -27,7 +27,14 @@ export async function runChat(
   const toolsUsed: string[] = [];
 
   for (let i = 0; i < MAX_TOOL_ROUNDS; i++) {
-    const res = await chatCompletion({ model: getModelHeavy(), messages, tools: toolSchemas });
+    const res = await chatCompletion({
+      model: getModelHeavy(),
+      messages,
+      tools: toolSchemas,
+      // 第一輪強制至少呼叫一次工具（避免模型偷懶只寒暄/給選單），之後自由
+      toolChoice: i === 0 ? 'required' : 'auto',
+      maxTokens: 2000,
+    });
     if (res.tool_calls?.length) {
       messages.push({ role: 'assistant', content: res.content ?? null, tool_calls: res.tool_calls });
       for (const tc of res.tool_calls) {

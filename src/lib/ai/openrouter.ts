@@ -14,6 +14,7 @@ interface CompletionOpts {
   model: string;
   messages: ChatMessage[];
   tools?: { type: 'function'; function: { name: string; description: string; parameters: unknown } }[];
+  toolChoice?: 'auto' | 'required' | 'none';
   temperature?: number;
   maxTokens?: number;
 }
@@ -36,7 +37,7 @@ export async function chatCompletion(opts: CompletionOpts): Promise<CompletionRe
   };
   if (opts.tools?.length) {
     body.tools = opts.tools;
-    body.tool_choice = 'auto';
+    body.tool_choice = opts.toolChoice ?? 'auto';
   }
 
   let lastErr: unknown;
