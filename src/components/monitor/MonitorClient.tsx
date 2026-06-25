@@ -61,7 +61,7 @@ export function MonitorClient() {
               {loading && ' · 載入中…'}
             </span>
           </div>
-          <PostsTable posts={posts} population={population} />
+          <PostsTable posts={posts} population={population} platform={platform} />
         </div>
       </section>
     </div>
