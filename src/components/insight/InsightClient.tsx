@@ -64,7 +64,7 @@ export function InsightClient() {
           disabled={generating}
           className="flex items-center gap-2 bg-ai-highlight text-on-primary px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-ai-hover transition-colors disabled:opacity-50"
         >
-          ✨ {generating ? '生成中…（約 20–40 秒）' : report ? '重新生成報告' : '生成報告'}
+          {generating ? '生成中…（約 20–40 秒）' : report ? '重新生成報告' : '生成報告'}
         </button>
       </div>
 

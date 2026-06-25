@@ -45,7 +45,6 @@ export function ChatWidget({ scope }: { scope: Scope }) {
           onClick={() => setOpen(true)}
           className="fixed bottom-8 right-8 z-[60] flex items-center gap-3 bg-ai-highlight text-on-primary px-6 py-4 rounded-[2rem] shadow-2xl hover:bg-ai-hover transition-all hover:scale-105"
         >
-          <span className="text-xl">✨</span>
           <span className="text-sm font-black">AI 智能分析師</span>
         </button>
       )}
@@ -53,7 +52,7 @@ export function ChatWidget({ scope }: { scope: Scope }) {
       {open && (
         <div className="fixed bottom-8 right-8 z-[60] w-[400px] max-w-[calc(100vw-2rem)] h-[560px] max-h-[calc(100vh-4rem)] bg-surface rounded-3xl shadow-2xl border border-outline-variant/30 flex flex-col overflow-hidden">
           <div className="px-5 py-4 bg-ai-highlight text-on-primary flex items-center justify-between">
-            <div className="flex items-center gap-2"><span>✨</span><span className="font-black text-sm">AI 智能分析師</span></div>
+            <div className="flex items-center gap-2"><span className="font-black text-sm">AI 智能分析師</span></div>
             <button onClick={() => setOpen(false)} className="text-on-primary/80 hover:text-on-primary text-lg leading-none">✕</button>
           </div>
           <div className="px-5 py-2 text-[11px] text-on-surface-variant/60 border-b border-outline-variant/10">

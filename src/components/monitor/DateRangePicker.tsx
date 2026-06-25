@@ -84,7 +84,6 @@ export function DateRangePicker({
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-2 bg-surface border border-outline-variant rounded-xl px-3 py-2 text-xs font-semibold text-on-surface-variant hover:border-primary/40 transition-colors tabular-nums"
       >
-        <span className="text-on-surface-variant/50">📅</span>
         {label}
         <span className="text-on-surface-variant/40">▾</span>
       </button>

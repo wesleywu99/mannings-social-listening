@@ -99,7 +99,7 @@ export function PostDetailModal({
         {/* AI 解讀結果 */}
         {(insight || loading) && (
           <div className="px-7 py-5 border-t border-outline-variant/20 max-h-[30vh] overflow-y-auto">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-ai-highlight mb-2">✨ AI 解讀</div>
+            <div className="text-[11px] font-bold uppercase tracking-wide text-ai-highlight mb-2">AI 解讀</div>
             {loading ? (
               <div className="text-sm text-on-surface-variant/60">分析中…</div>
             ) : (
@@ -115,7 +115,7 @@ export function PostDetailModal({
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-ai-highlight text-on-primary text-sm font-bold hover:bg-ai-hover transition-colors disabled:opacity-50"
           >
-            ✨ {insight ? '重新解讀' : 'AI 解讀'}
+            {insight ? '重新解讀' : 'AI 解讀'}
           </button>
           <button
             onClick={onClose}
