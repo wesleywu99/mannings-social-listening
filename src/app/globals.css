@@ -1,26 +1,37 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* 來自 new/數據監測工作台.html 的設計 token（Tailwind v4 用 @theme 定義） */
+@theme {
+  --color-primary: #3751c5;
+  --color-on-primary: #ffffff;
+  --color-ai-highlight: #5b73e8;
+  --color-ai-hover: #4a61d0;
+  --color-background: #fbf8ff;
+  --color-surface: #ffffff;
+  --color-surface-container: #f4f4f5;
+  --color-on-surface: #1a1b22;
+  --color-on-surface-variant: #444653;
+  --color-outline-variant: #e3e1ec;
+  --color-sentiment-pos: #10b981;
+  --color-sentiment-neg: #ef4444;
+  --color-facebook: #5577ba;
+  --color-instagram: #b5698a;
+  --color-threads: #3d3d3d;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-inter), Arial, Helvetica, sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #fbfbff;
+  color: var(--color-on-surface);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
+
+/* mockup 自訂 utilities */
+.card-shadow { box-shadow: 0 10px 40px rgba(0, 0, 0, 0.02); }
+.active-brand-glow { box-shadow: 0 0 25px rgba(55, 81, 197, 0.15); }
+.table-row-hover:hover { background-color: #f8f9fa; }
+.no-border-table th, .no-border-table td { border: none !important; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
