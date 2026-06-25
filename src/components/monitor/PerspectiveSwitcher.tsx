@@ -35,11 +35,20 @@ export function PerspectiveSwitcher({
               }`}
             >
               <span
-                className={`text-[10px] font-black uppercase tracking-[0.15em] ${
+                className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.15em] ${
                   isActive ? 'opacity-80' : 'text-on-surface-variant/60'
                 }`}
               >
-                {b.is_own ? '我們的品牌' : b.name}
+                {b.name}
+                {b.is_own && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[9px] ${
+                      isActive ? 'bg-white/20' : 'bg-primary/10 text-primary'
+                    }`}
+                  >
+                    我們
+                  </span>
+                )}
               </span>
               <div className="mt-6 flex flex-col">
                 <span className="text-3xl font-black">{ownTotalEngagement.toLocaleString()}</span>

@@ -5,10 +5,11 @@ import { PerspectiveSwitcher, type BrandRow } from './PerspectiveSwitcher';
 import { PlatformTabs } from './PlatformTabs';
 import { KpiRow } from './KpiRow';
 import { PostsTable } from './PostsTable';
+import { DEFAULT_BRAND } from '@/lib/config';
 
 export function MonitorClient() {
   const [brands, setBrands] = useState<BrandRow[]>([]);
-  const [brand, setBrand] = useState('我們的品牌');
+  const [brand, setBrand] = useState(DEFAULT_BRAND);
   const [platform, setPlatform] = useState<Platform>('threads');
   const [posts, setPosts] = useState<Post[]>([]);
   const [kpis, setKpis] = useState<PlatformKpis[]>([]);

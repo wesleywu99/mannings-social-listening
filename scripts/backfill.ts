@@ -5,10 +5,11 @@ import * as XLSX from 'xlsx';
 import { createClient } from '@supabase/supabase-js';
 import { normalizeRow } from '../src/lib/domain/normalize';
 import type { Platform } from '../src/lib/domain/types';
+import { DEFAULT_BRAND } from '../src/lib/config';
 
 const XLSX_PATH = process.argv[2]
   ?? 'C:/Users/wesleywu/Downloads/App Script/Mannings BoostUp Report.xlsx';
-const BRAND = '我們的品牌';
+const BRAND = DEFAULT_BRAND;
 const SHEET_TO_PLATFORM: Record<string, Platform> = {
   Threads: 'threads', IG: 'ig', FB: 'fb',
 };
@@ -36,7 +37,8 @@ async function main() {
           follower_count: p.followerCount, engagement_total: p.engagementTotal,
           metrics: p.metrics,
         };
-      });
+      })
+      .filter((p) => p.post_time);   // 跳過無法解析時間的列
     for (let i = 0; i < posts.length; i += 500) {
       const batch = posts.slice(i, i + 500);
       const { error } = await supa.from('posts')

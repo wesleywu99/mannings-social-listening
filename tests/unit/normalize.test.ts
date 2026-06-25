@@ -45,4 +45,20 @@ describe('normalizeRow', () => {
     expect(post.likes).toBeNull();
     expect(post.engagementTotal).toBeNull();
   });
+
+  it('parses an Excel serial number Post Time (xlsx date cell)', () => {
+    // 45292 = 2024-01-01 in Excel serial dates
+    const post = normalizeRow('ig', '我們的品牌', { 'Post Time': 45292, 'Post URL': 'x' });
+    expect(post.postTime.startsWith('2024-01-01')).toBe(true);
+  });
+
+  it('accepts a JS Date object as Post Time', () => {
+    const post = normalizeRow('ig', '我們的品牌', { 'Post Time': new Date('2024-03-01T00:00:00Z'), 'Post URL': 'x' });
+    expect(post.postTime).toBe('2024-03-01T00:00:00.000Z');
+  });
+
+  it('returns empty postTime for an unparseable Post Time', () => {
+    const post = normalizeRow('ig', '我們的品牌', { 'Post Time': 'not-a-date', 'Post URL': 'x' });
+    expect(post.postTime).toBe('');
+  });
 });

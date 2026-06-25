@@ -1,6 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { computeKpis } from '@/lib/domain/aggregate';
-import type { Platform, Post, PlatformKpis } from '@/lib/domain/types';
+import type { Platform, Post, PlatformKpis, PostSource } from '@/lib/domain/types';
 
 interface QueryArgs {
   brand: string;
@@ -21,6 +21,7 @@ function rowToPost(r: Record<string, unknown>): Post {
     comments: r.comments as number | null, followerCount: r.follower_count as number | null,
     engagementTotal: r.engagement_total as number | null,
     metrics: (r.metrics as Record<string, number>) ?? {},
+    sources: (r.sources as PostSource[]) ?? [],
   };
 }
 
