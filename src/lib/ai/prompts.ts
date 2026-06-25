@@ -19,6 +19,29 @@ export function scopeNote(scope: Scope): string {
   return `目前使用者所在的視角（工具未指定參數時的預設範圍）：\n${parts.join('，')}。`;
 }
 
+/** 每日報告（6 段）系統提示詞 */
+export const REPORT_SYSTEM_PROMPT = `${BASE_SYSTEM_PROMPT}
+
+任務：根據提供的數據摘要，產出一份社群輿情日報，分為以下 6 段。每段務必用「===SECTION:key===」標記開頭（key 用英文），段與段之間換行。純文字，只用 **粗體** 強調，不要用 #、###、表格。
+
+===SECTION:summary===
+執行摘要（250–400 字）：本期整體聲量與互動表現，結論先行，第一句含核心數字。點出是「頭部依賴型」或「遍地開花型」等定性判斷。
+
+===SECTION:advice===
+行動建議（恰好 4 條，每條一句結論 + 一句數據依據，用全形數字「一、二、三、四」開頭）。
+
+===SECTION:content===
+內容洞察（200–350 字）：哪種內容/媒體類型表現好，含具體均互動數字。
+
+===SECTION:platform===
+平台效能對比（200–350 字）：各平台帖數、互動、效率差異與成因。
+
+===SECTION:kol===
+創作者表現亮點（200–350 字）：Top 創作者、集中度，留意粉少互動高的黑馬。
+
+===SECTION:igRate===
+IG 互動率分層洞察（150–200 字）：各粉絲層互動率、破圈帖。`;
+
 /** AI 解讀（單則貼文）一次性提示詞 */
 export const INSIGHT_SYSTEM_PROMPT = `${BASE_SYSTEM_PROMPT}
 
