@@ -2,8 +2,8 @@
 import type { Platform } from '@/lib/domain/types';
 
 const TABS: { key: Platform; label: string; dot: string }[] = [
-  { key: 'threads', label: 'Threads', dot: 'bg-threads' },
   { key: 'ig', label: 'Instagram', dot: 'bg-instagram' },
+  { key: 'threads', label: 'Threads', dot: 'bg-threads' },
   { key: 'fb', label: 'Facebook', dot: 'bg-facebook' },
 ];
 

@@ -10,7 +10,7 @@ import { DEFAULT_BRAND } from '@/lib/config';
 export function MonitorClient() {
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [brand, setBrand] = useState(DEFAULT_BRAND);
-  const [platform, setPlatform] = useState<Platform>('threads');
+  const [platform, setPlatform] = useState<Platform>('ig');
   const [posts, setPosts] = useState<Post[]>([]);
   const [kpis, setKpis] = useState<PlatformKpis[]>([]);
   const [loading, setLoading] = useState(false);
