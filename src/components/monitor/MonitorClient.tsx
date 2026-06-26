@@ -126,7 +126,7 @@ export function MonitorClient() {
         </div>
       </div>
 
-      <OverviewSummary kpis={kpis} prevKpis={prevKpis} trends={trends} />
+      <OverviewSummary kpis={kpis} prevKpis={prevKpis} trends={trends} scope={scope} />
 
       <section className="space-y-8">
         <PlatformTabs value={platform} onChange={setPlatform} />

@@ -27,6 +27,28 @@ export interface TrendPoint {
   posts: number; // 該桶貼文數
 }
 
+/** 一個時間桶的破圈旗標：eff=效率破圈（少帖高互動），peak=聲量高峰 */
+export interface BreakoutFlag {
+  eff: boolean;
+  peak: boolean;
+}
+
+/**
+ * 偵測破圈日：對逐桶序列做 +2σ。
+ * - peak：當桶總互動 > μ+2σ（聲量高峰）
+ * - eff ：當桶每帖互動 > μ+2σ（少帖高互動）
+ * 樣本 ≤3 時 anomalyThreshold 回 Infinity → 不誤判。
+ */
+export function detectBreakouts(eng: number[], posts: number[]): BreakoutFlag[] {
+  const eff = eng.map((e, i) => (posts[i] > 0 ? e / posts[i] : 0));
+  const engTh = anomalyThreshold(eng);
+  const effTh = anomalyThreshold(eff);
+  return eng.map((e, i) => ({
+    peak: e > engTh,
+    eff: posts[i] > 0 && eff[i] > effTh,
+  }));
+}
+
 const DAY_MS = 86400000;
 
 /** 取 ISO / YYYY-MM-DD 字串的日期部分，轉成 UTC 午夜 Date（無法解析回 null） */

@@ -46,3 +46,22 @@ body {
 .no-border-table th, .no-border-table td { border: none !important; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* 統一模態框：背景柔和漸變模糊 + 彈窗從中心 scale 緩出（ease-in-out 350ms） */
+.modal-scrim {
+  position: fixed; inset: 0; z-index: 80;
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+  background: radial-gradient(120% 120% at 50% 30%, rgba(15,23,42,.18), rgba(15,23,42,.34));
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  animation: modal-scrim-in .35s ease-in-out both;
+}
+.modal-pop { animation: modal-pop-in .35s ease-in-out both; }
+.modal-scrim.modal-closing { animation: modal-scrim-out .3s ease-in-out both; }
+.modal-scrim.modal-closing .modal-pop { animation: modal-pop-out .3s ease-in-out both; }
+@keyframes modal-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-scrim-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes modal-pop-in { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }
+@keyframes modal-pop-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(.97); } }
+@media (prefers-reduced-motion: reduce) {
+  .modal-scrim, .modal-pop, .modal-scrim.modal-closing, .modal-scrim.modal-closing .modal-pop { animation: none; }
+}

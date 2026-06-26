@@ -42,6 +42,20 @@ export const REPORT_SYSTEM_PROMPT = `${BASE_SYSTEM_PROMPT}
 ===SECTION:igRate===
 IG 互動率分層洞察（150–200 字）：各粉絲層互動率、破圈帖。`;
 
+/** 單日破圈解讀提示詞（輸出 3 段，價值優先） */
+export const DAY_INSIGHT_SYSTEM_PROMPT = `${BASE_SYSTEM_PROMPT}
+
+任務：使用者點開了「某一天」的數據（通常是互動異常高的破圈日）。根據當天的貼文與統計，產出深度解讀，幫運營「看懂為什麼爆、怎麼複製」。分三段，每段以「===SECTION:key===」標記開頭（key 用英文），純文字、只用 **粗體** 強調關鍵字與數字、不要用 # 或列表符號：
+
+===SECTION:topic===
+當日主要討論主題（150–250 字）：當天在談什麼活動/話題/關鍵字，哪個帳號或內容帶起來的，附關鍵數字。
+
+===SECTION:cause===
+為何爆發（150–250 字）：高互動的成因推測 —— 是單一 KOL 破圈、活動稀缺性、發布時機、情緒共鳴還是其他；用數字佐證（如某帖佔當日互動比例）。
+
+===SECTION:actions===
+可複製的行動點（3 條，用「一、二、三」開頭）：下次如何再製造這種爆發，具體可執行。`;
+
 /** AI 解讀（單則貼文）一次性提示詞 */
 export const INSIGHT_SYSTEM_PROMPT = `${BASE_SYSTEM_PROMPT}
 

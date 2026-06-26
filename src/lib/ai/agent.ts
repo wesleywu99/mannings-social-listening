@@ -1,8 +1,8 @@
 import 'server-only';
 import { chatCompletion, getModelHeavy } from './openrouter';
 import { buildTools } from './tools';
-import { BASE_SYSTEM_PROMPT, INSIGHT_SYSTEM_PROMPT, scopeNote } from './prompts';
-import { getKpis } from '@/lib/data/posts';
+import { BASE_SYSTEM_PROMPT, INSIGHT_SYSTEM_PROMPT, DAY_INSIGHT_SYSTEM_PROMPT, scopeNote } from './prompts';
+import { getKpis, queryPosts } from '@/lib/data/posts';
 import type { Post } from '@/lib/domain/types';
 import type { Scope, ChatMessage } from './types';
 
@@ -57,6 +57,48 @@ export async function runChat(
   // 超過工具迴圈上限：強制要最終回答（不帶工具）
   const final = await chatCompletion({ model: getModelHeavy(), messages });
   return { answer: final.content ?? '（無法產生回應）', toolsUsed };
+}
+
+export interface DayInsight { topic: string; cause: string; actions: string; }
+
+/** 單日破圈解讀：抓當天（全平台）貼文 + 統計 → AI 產出 主題/成因/行動點 */
+export async function runDayInsight(date: string, scope: Scope): Promise<DayInsight> {
+  const posts = await queryPosts({
+    brand: scope.brand,
+    dateStart: `${date}T00:00:00`,
+    dateEnd: `${date}T23:59:59`,
+  });
+  const engs = posts.map((p) => p.engagementTotal ?? 0);
+  const totalEng = engs.reduce((a, b) => a + b, 0);
+  const epp = posts.length ? Math.round(totalEng / posts.length) : 0;
+  const top = [...posts].sort((a, b) => (b.engagementTotal ?? 0) - (a.engagementTotal ?? 0)).slice(0, 10);
+
+  const ctx = [
+    `【當日統計】日期=${date}，貼文數=${posts.length}，總互動=${totalEng}，每帖互動=${epp}`,
+    '【當日 Top 貼文】',
+    ...top.map((p, i) =>
+      `${i + 1}. [${p.platform}] @${p.username ?? ''} 互動=${p.engagementTotal ?? 0}${p.followerCount != null ? ` 粉絲=${p.followerCount}` : ''}｜${(p.content ?? '').slice(0, 160)}`,
+    ),
+  ].join('\n');
+
+  const res = await chatCompletion({
+    model: getModelHeavy(),
+    messages: [
+      { role: 'system', content: DAY_INSIGHT_SYSTEM_PROMPT },
+      { role: 'user', content: ctx },
+    ],
+    maxTokens: 1600,
+  });
+  const text = res.content ?? '';
+  const grab = (key: string) => {
+    const m = text.match(new RegExp(`={2,}\\s*SECTION\\s*:\\s*${key}\\s*={2,}([\\s\\S]*?)(?:={2,}\\s*SECTION|$)`, 'i'));
+    return m ? m[1].trim() : '';
+  };
+  return {
+    topic: grab('topic') || text.trim() || '（無法產生解讀）',
+    cause: grab('cause'),
+    actions: grab('actions'),
+  };
 }
 
 /** AI 解讀：針對單一貼文的一次性解讀（與當前平台基準比較） */
