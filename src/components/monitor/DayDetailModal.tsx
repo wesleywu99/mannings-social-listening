@@ -143,18 +143,20 @@ export function DayDetailModal({
                   </div>
                 )}
 
-                {/* Top 驅動貼文 */}
+                {/* Top 驅動貼文（右欄標明 Engagement，內容截一行） */}
                 {!loading && stats.top.length > 0 && (
                   <div>
-                    <div className="font-mono text-[10px] font-semibold uppercase tracking-wide text-mute mb-2">Top driving posts</div>
-                    <div className="border border-outline-variant rounded-xl px-3.5">
+                    <div className="flex items-center justify-between font-mono text-[10px] font-semibold uppercase tracking-wide text-mute mb-2">
+                      <span>Top driving posts</span><span>Engagement</span>
+                    </div>
+                    <div className="border border-outline-variant rounded-xl divide-y divide-outline-variant/50">
                       {stats.top.map((p, i) => (
-                        <div key={p.postUrl ?? i} className="flex gap-3 py-2.5 border-b last:border-b-0 border-outline-variant/50">
-                          <span className="text-[13px] font-semibold tabular-nums w-14 text-right shrink-0">{(p.engagementTotal ?? 0).toLocaleString()}</span>
-                          <span className="min-w-0">
-                            <span className="block text-[12.5px] text-on-surface-variant truncate">{p.content || '—'}</span>
-                            <span className="block text-[11px] text-mute mt-0.5">@{p.username} · {META[p.platform].label}{p.mediaType ? ` · ${p.mediaType}` : ''}</span>
-                          </span>
+                        <div key={p.postUrl ?? i} className="flex items-center gap-3 px-3.5 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[12.5px] text-on-surface-variant truncate">{p.content || '—'}</div>
+                            <div className="text-[11px] text-mute mt-0.5 truncate">@{p.username} · {META[p.platform].label}{p.mediaType ? ` · ${p.mediaType}` : ''}</div>
+                          </div>
+                          <div className="text-[13px] font-semibold tabular-nums shrink-0 text-on-surface">{(p.engagementTotal ?? 0).toLocaleString()}</div>
                         </div>
                       ))}
                     </div>
