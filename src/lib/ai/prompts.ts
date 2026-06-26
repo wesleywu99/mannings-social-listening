@@ -42,6 +42,14 @@ export const REPORT_SYSTEM_PROMPT = `${BASE_SYSTEM_PROMPT}
 ===SECTION:igRate===
 IG 互動率分層洞察（150–200 字）：各粉絲層互動率、破圈帖。`;
 
+/** 平台級「AI 解讀」（對當前篩選的單一平台數據）提示詞 */
+export const MODULE_INSIGHT_SYSTEM_PROMPT = `${BASE_SYSTEM_PROMPT}
+
+任務：針對單一平台當前篩選範圍的數據，輸出三段、共 200–250 字。純文字、只用 **粗體** 強調、不要用 # 或列表符號。每段都要有：
+第一段 關鍵發現：2–3 個值得注意的 pattern 或反差（必須含具體數字）。
+第二段 成因推測：數據背後可能的原因，不要只複述數字。
+第三段 行動建議：1–2 個具體且可立即執行的下一步（禁用「持續優化」「加強互動」等空話）。`;
+
 /** 單日破圈解讀提示詞（輸出 3 段，價值優先） */
 export const DAY_INSIGHT_SYSTEM_PROMPT = `${BASE_SYSTEM_PROMPT}
 

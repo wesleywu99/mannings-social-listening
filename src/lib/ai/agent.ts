@@ -1,9 +1,10 @@
 import 'server-only';
 import { chatCompletion, getModelHeavy } from './openrouter';
 import { buildTools } from './tools';
-import { BASE_SYSTEM_PROMPT, INSIGHT_SYSTEM_PROMPT, DAY_INSIGHT_SYSTEM_PROMPT, scopeNote } from './prompts';
+import { BASE_SYSTEM_PROMPT, INSIGHT_SYSTEM_PROMPT, DAY_INSIGHT_SYSTEM_PROMPT, MODULE_INSIGHT_SYSTEM_PROMPT, scopeNote } from './prompts';
 import { getKpis, queryPosts } from '@/lib/data/posts';
-import type { Post } from '@/lib/domain/types';
+import { median } from '@/lib/domain/engagement';
+import type { Platform, Post } from '@/lib/domain/types';
 import type { Scope, ChatMessage } from './types';
 
 const MAX_TOOL_ROUNDS = 6;
@@ -100,6 +101,28 @@ export async function runDayInsight(start: string, end: string, scope: Scope): P
     cause: grab('cause'),
     actions: grab('actions'),
   };
+}
+
+/** 平台級 AI 解讀：對當前篩選的單一平台數據做三段分析 */
+export async function runModuleInsight(platform: Platform, scope: Scope): Promise<string> {
+  const posts = await queryPosts({ brand: scope.brand, platform, dateStart: scope.dateStart, dateEnd: scope.dateEnd });
+  const engs = posts.map((p) => p.engagementTotal ?? 0);
+  const total = engs.reduce((a, b) => a + b, 0);
+  const avg = posts.length ? Math.round(total / posts.length) : 0;
+  const med = median(engs);
+  const top = [...posts].sort((a, b) => (b.engagementTotal ?? 0) - (a.engagementTotal ?? 0)).slice(0, 10);
+  const name = { ig: 'Instagram', threads: 'Threads', fb: 'Facebook' }[platform];
+  const ctx = [
+    `【${name} 當前篩選統計】貼文數=${posts.length}，總互動=${total}，均互動=${avg}，中位數=${med}`,
+    '【Top 10 貼文】',
+    ...top.map((p, i) => `${i + 1}. @${p.username ?? ''} 互動=${p.engagementTotal ?? 0}${p.followerCount != null ? ` 粉絲=${p.followerCount}` : ''}｜${(p.content ?? '').slice(0, 120)}`),
+  ].join('\n');
+  const res = await chatCompletion({
+    model: getModelHeavy(),
+    messages: [{ role: 'system', content: MODULE_INSIGHT_SYSTEM_PROMPT }, { role: 'user', content: ctx }],
+    maxTokens: 900,
+  });
+  return res.content ?? '（無法產生解讀）';
 }
 
 /** AI 解讀：針對單一貼文的一次性解讀（與當前平台基準比較） */

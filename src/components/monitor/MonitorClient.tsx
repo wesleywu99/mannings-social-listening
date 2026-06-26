@@ -6,6 +6,8 @@ import { BrandSelector, type BrandRow } from './BrandSelector';
 import { PlatformTabs } from './PlatformTabs';
 import { PostsTable } from './PostsTable';
 import { OverviewSummary } from './OverviewSummary';
+import { ModuleInsightModal } from './ModuleInsightModal';
+import { buildPostsCsv, downloadCsv } from './exportCsv';
 import { DateRangePicker } from './DateRangePicker';
 import { DateRangePresets } from './DateRangePresets';
 import { ChatWidget } from './ChatWidget';
@@ -121,11 +123,25 @@ export function MonitorClient() {
 
   const population = posts.map((p) => p.engagementTotal ?? 0);
 
+  // 表格控制：搜尋（前端過濾已載入貼文）、AI 平台解讀
+  const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [moduleOpen, setModuleOpen] = useState(false);
+  const q = search.trim().toLowerCase();
+  const shown = q
+    ? posts.filter((p) => (p.content ?? '').toLowerCase().includes(q) || (p.username ?? '').toLowerCase().includes(q))
+    : posts;
+
   // chat / 解讀 共用範圍：以 brand + 日期為硬性篩選；platform 不鎖（讓 AI 跨平台分析）
   const scope: Scope = {
     brand,
     dateStart: start ? `${start}T00:00:00` : undefined,
     dateEnd: end ? `${end}T23:59:59` : undefined,
+  };
+
+  const handleDownload = () => {
+    if (!shown.length) return;
+    downloadCsv(`Mannings_${platform}_${start || 'all'}_${end || 'all'}.csv`, buildPostsCsv(shown, platform));
   };
 
   return (
@@ -152,17 +168,54 @@ export function MonitorClient() {
       <section className="space-y-8">
         <PlatformTabs value={platform} onChange={setPlatform} />
         <div className="bg-surface rounded-2xl card-shadow overflow-hidden border border-outline-variant">
-          <div className="px-8 py-6 flex items-center gap-3 border-b border-outline-variant/10">
-            <h3 className="text-lg font-semibold">{PLATFORM_LABEL[platform]}</h3>
-            <div className="h-4 w-px bg-outline-variant" />
-            <span className="text-xs text-on-surface-variant font-medium">
-              {posts.length} records{(start || end) && ' (filtered)'} · <span className="text-sentiment-neg font-bold">●</span> +2σ outlier
-              {loading && ' · Loading…'}
-            </span>
+          <div className="px-6 py-4 flex items-center justify-between gap-3 border-b border-outline-variant/60 flex-wrap">
+            <div className="flex items-center gap-3 min-w-0">
+              <h3 className="text-lg font-semibold">{PLATFORM_LABEL[platform]}</h3>
+              <div className="h-4 w-px bg-outline-variant" />
+              <span className="text-xs text-on-surface-variant/70 font-medium tabular-nums">
+                {shown.length}{q && ` / ${posts.length}`} records{(start || end) ? ' · filtered' : ''} · <span className="text-sentiment-neg font-bold">●</span> +2σ
+                {loading && ' · Loading…'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {searchOpen && (
+                <input
+                  autoFocus
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Escape') { setSearch(''); setSearchOpen(false); } }}
+                  placeholder="搜尋內容或帳號…"
+                  className="h-8 w-44 rounded-md border border-outline-variant bg-surface px-2.5 text-xs text-on-surface outline-none focus:border-on-surface/40 transition-colors"
+                />
+              )}
+              <button
+                title="搜尋貼文 / 帳號"
+                onClick={() => { setSearchOpen((o) => { if (o) setSearch(''); return !o; }); }}
+                className={`w-8 h-8 inline-flex items-center justify-center rounded-md border transition-colors ${searchOpen ? 'border-on-surface/40 text-on-surface' : 'border-outline-variant text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}`}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+              </button>
+              <button
+                title="下載目前資料 (CSV)"
+                onClick={handleDownload}
+                disabled={!shown.length}
+                className="w-8 h-8 inline-flex items-center justify-center rounded-md border border-outline-variant text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors disabled:opacity-40"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="m7 11 5 5 5-5" /><path d="M5 21h14" /></svg>
+              </button>
+              <button
+                onClick={() => setModuleOpen(true)}
+                className="inline-flex items-center h-8 px-3 rounded-md bg-primary text-on-primary text-[13px] font-semibold hover:bg-ai-hover transition-colors"
+              >
+                AI 解讀
+              </button>
+            </div>
           </div>
-          <PostsTable posts={posts} population={population} platform={platform} scope={scope} />
+          <PostsTable posts={shown} population={population} platform={platform} scope={scope} />
         </div>
       </section>
+
+      {moduleOpen && <ModuleInsightModal platform={platform} scope={scope} onClose={() => setModuleOpen(false)} />}
 
       <ChatWidget scope={scope} />
     </div>
