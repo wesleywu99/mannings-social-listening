@@ -1,0 +1,180 @@
+# Mannings Social Listening — 專案總覽 & 深度優化 Plan
+
+> 這份文件是專案的**單一事實來源 / 交接文件**。換一部電腦、或新成員加入，看這份即可接手。
+> 最後更新：2026-06（持續維護）
+
+---
+
+## 0. 一句話
+
+Mannings（萬寧）BoostUP 社群監控看板：把原本「n8n → Google Sheets → Apps Script」的方案，**遷移為 n8n → Supabase → Vercel(Next.js)**，並升級成有 **agentic AI 解讀**的社交聆聽（輿情）產品。目標用戶：**營銷 / 內容運營 / 社媒負責人**。第一性原理：**給用戶決策價值，不為做而做**。
+
+---
+
+## 1. 背景
+
+- 原系統：`../Code.gs`（Apps Script 後端）+ `../Index.html`（160KB 單檔前端），資料在 Google Sheets。逃離原因：Apps Script 6 分鐘上限、`google.script.run` 無法 streaming、單檔難維護。
+- 原始資料形態：`../Mannings BoostUp Report.xlsx`（Threads / IG / FB 三個 sheet，欄位各異）。
+- 新 UI 設計參考：`../new/`（數據監測工作台.html、AI Insight Center.html）；視覺語言對齊 `Downloads/DESIGN-vercel.md`（Vercel Geist 極簡：墨黑 on 近白、細灰邊線、中性灰階、Geist 字體、顏色極少）。
+
+## 2. 架構
+
+```
+ n8n（自家品牌；競品之後）
+   │  直接 insert（DB 觸發器自動去重/合併/刷新）
+   ▼
+ Supabase (Postgres)  ── posts / ai_reports / brands
+   ▲ service-role only
+   │  /api/* 伺服路由（service-role key；瀏覽器永不直連 DB）
+ Vercel (Next.js 16 App Router, TS, Tailwind v4)
+   ├─ /monitor      數據監測工作台
+   ├─ /insight      AI Insight Center
+   └─ /api/...      data / ai（OpenRouter）
+        ▲ 每條路由都過 ?token=mannings gate（src/proxy.ts）
+```
+
+- **前端棧**：Next.js 16（App Router、`src/`、`proxy.ts` 非 `middleware.ts`）、Tailwind v4（`@theme` 在 `globals.css`，非 config 檔）、Geist 字體、Chart 用自繪 SVG（無圖表庫）。
+- **AI**：OpenRouter（OpenAI 相容），預設 `deepseek/deepseek-chat`（須支援 function calling）。
+- **存取控制**：`?token=mannings` URL gate（`APP_ACCESS_TOKEN`）。瀏覽器只打 `/api/*`，server 用 service-role 讀 Supabase。
+
+## 3. 關鍵決策（accumulated）
+
+| # | 決策 | 選擇 |
+|---|---|---|
+| 1 | 範圍 | 搬遷全部既有功能 + 競品分析（schema/UI 先備） |
+| 2 | 資料模型 | **單一 `posts` 表** + `brand` + `platform` 兩切分維度（跨平台/跨品牌分析） |
+| 3 | brand 命名 | 真實名稱 `Mannings` + `is_own` 旗標（非「我們的品牌」） |
+| 4 | 多維度收集 | posts 加 `sources` jsonb 陣列（keyword/hashtag/mention/account），GIN 索引 |
+| 5 | 去重 | **DB 觸發器 `posts_dedup_merge`**：同 (platform, post_url) → 合併 sources(union) + 刷新互動數；n8n 只管 insert |
+| 6 | AI 位置 | Vercel 伺服函式（streaming-ready），離開 Apps Script |
+| 7 | AI 取數 | 固定唯讀工具集（agentic tool-calling），第一輪強制取數 |
+| 8 | 頁面 | 2 頁（監控 / AI Insight）+ 右下角浮動 chat widget |
+| 9 | AI 解讀 vs chat | 對話串分開，共用工具/資料層 |
+| 10 | 登入 | `?token=mannings` URL gate（上線前可換 Supabase Auth） |
+| 11 | Email 推送 | 暫緩（架構預留） |
+| 12 | 報告排程 | n8n 統籌（抓→寫→呼叫 /api/report） |
+| 13 | 視覺風格 | Vercel Geist 極簡；無 emoji；大數字近黑、細灰邊線 |
+| 14 | 預設視窗 | 最近 30 天密集視窗（避開雜訊日期撐成整年） |
+| 15 | 破圈偵測 | 趨勢圖逐日 +2σ：效率破圈（每帖互動）+ 聲量高峰（總互動），可鑽取 |
+
+## 4. 資料模型（Supabase）
+
+Project ref：`eigrewvzlfwtejxugbgp`（名 `mannings-social-listening`，RLS 啟用，service_role 繞過）。
+Migration SQL：`supabase/migrations/`（0001 建表、0002 種 brand、0003 sources+改名、0004 去重觸發器）。
+
+- **posts**：`id, brand, platform('threads'|'ig'|'fb'), post_time(timestamptz,UTC), username, content, post_url, media_type, likes, comments, follower_count, engagement_total, metrics(jsonb 平台特有), sources(jsonb 多維度), ingested_at`；`unique(platform, post_url)`；索引 `(brand,platform,post_time)` + GIN(sources)。
+- **ai_reports**：6 段日報快取 `summary/advice/content/platform/kol/ig_rate` + `brand,date_start,date_end,generated_at`；`unique(brand,date_start,date_end)`。
+- **brands**：`name, is_own, platform_handles, sort_order`（驅動品牌選擇器）。
+- **去重觸發器**：見 `0004_posts_dedup_merge_trigger.sql`。
+
+平台欄位對應（來自 xlsx）：Threads `Likes/Comments/Quotes/Reposts/Reshares`；IG `Likes/Comments/Follower_Count`；FB `Like/Love/Care/Haha/Wow/Sad/Angry/Comments/Reshares`。共用欄升為 column，平台特有進 `metrics`。
+
+## 5. 已完成功能（current state）
+
+**監控頁 `/monitor`**
+- 頂部控制列：品牌選擇器（BrandSelector）+ 日期預設/日曆（自訂日曆，非原生）
+- Cross-channel 總覽：總量三卡 + 期間 Δ；雙軸趨勢圖（互動折線 + 貼文長條）含**破圈日標記**（點任一日 → DayDetailModal：統計卡 + 平台占比 + Top 貼文 + **AI 單日解讀**）；平台對比表（Posts/Engagement/Avg/**Outlier%**/Share/Δ）
+- 平台分頁 → 貼文表（可點欄名排序、+2σ 紅點、內容點擊開 PostDetailModal 看全文+全互動+AI 解讀）
+- 表格工具列：**搜尋**（前端過濾）、**下載 CSV**（平台感知欄位 + UTF-8 BOM）、**AI 解讀**（平台級三段：關鍵發現/成因/行動建議）
+- 右下角 **AI 智能分析師**（agentic chat，吃當前 brand+日期範圍，會呼叫工具取數）
+
+**AI Insight Center `/insight`**
+- 6 段 AI 日報（SOP 流程：工具組裝 context → 單次 AI → 解析），每模塊**左側對應圖表/數據**（KPI / 媒體均值 / 平台互動 / Top 創作者 / IG 分層）+ **發文時段熱力圖**（第 07 模塊）
+- 「重新生成報告」；報告快取在 ai_reports
+
+**AI 引擎 `src/lib/ai/`**
+- 工具層 `tools.ts`：`aggregate_metrics / query_posts / top_creators / engagement_distribution / time_patterns / ig_tier_analysis`（唯讀、吃 brand/platform/date）
+- `agent.ts`：`runChat`（多輪工具迴圈）、`runDayInsight`（區間）、`runModuleInsight`（平台）、`runInsight`（單貼文）、`runReport`（6 段）
+- `openrouter.ts`：function calling + 重試；模型 env 可換
+- 統一模態框 `components/Modal.tsx`：scale + 漸變模糊動畫 350ms ease-in-out
+
+**測試**：Vitest（normalize / +2σ / KPI / auth / stats / breakouts / heatmap 單元 + posts/dedup 整合）。
+
+## 6. 本機開發（換電腦接手步驟）
+
+```bash
+# 1. 取得程式碼
+git clone <repo-url> && cd webapp
+npm install
+
+# 2. 建 .env.local（見 .env.example），填：
+#    NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
+#    APP_ACCESS_TOKEN=mannings
+#    OPENROUTER_API_KEY / AI_MODEL_HEAVY / AI_MODEL_FAST
+#    （本機在港/台時區，無需設 TZ）
+
+# 3. Supabase 表：到 Dashboard SQL Editor 依序執行 supabase/migrations/*.sql
+#    （或用 Supabase CLI：supabase link + db push）
+
+# 4. 回填現有資料（從 xlsx）
+npm run backfill           # 讀 ../Mannings BoostUp Report.xlsx
+
+# 5. 開發
+npm run dev                # http://localhost:3000/monitor?token=mannings
+npm test                   # 單元 + 整合測試
+```
+
+## 7. n8n 整合
+
+詳見 `docs/n8n-integration.md`（要點）：
+- **寫入**：n8n 抓 Threads/IG/FB → 直接 `insert` 進 `posts`（去重觸發器自動處理）；欄位對照見該文件；自家 `brand='Mannings'`，競品填真名 + `is_own=false`。
+- **每日報告**：排程 flow：抓→寫→`POST /api/report?token=mannings`（body `{scope:{brand:'Mannings'}}`，timeout ≥120s）。
+
+## 8. 部署（Vercel）
+
+1. 推 GitHub（見 README）。
+2. Vercel 連這個 repo（Root Directory = `webapp`）。
+3. **環境變數**（Vercel → Settings → Environment Variables）：
+   - `NEXT_PUBLIC_SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`
+   - `APP_ACCESS_TOKEN=mannings`
+   - `OPENROUTER_API_KEY`、`AI_MODEL_HEAVY`、`AI_MODEL_FAST`
+   - **`TZ=Asia/Hong_Kong`**（關鍵：讓伺服器端時段運算＝香港時間，否則熱力圖/時段偏 8 小時）
+4. Deploy。存取：`https://<app>.vercel.app/monitor?token=mannings`。
+
+> ⚠️ 上線前：把曾在對話貼出的 Supabase / OpenRouter 密鑰**重新產生（rotate）**。
+
+## 9. 深度優化 Roadmap（挨個做）
+
+狀態：✅ 完成 / 🔜 進行中 / ⬜ 待辦
+
+| 優先 | 項目 | 說明 | 狀態 |
+|---|---|---|---|
+| P0 | 時區（部署） | Vercel 設 `TZ=Asia/Hong_Kong`（不需改碼） | 🔜 部署時 |
+| P0 | 數據清潔 | normalize trim 前後空白/換行；username 已清 | ✅ |
+| P0 | 雜訊日期 | xlsx 有 6-9 筆 Excel 序列號跑掉的 2025/2026-03 列；預設視窗已避開；可選擇隔離/修正 | ⬜ |
+| P1 | 數據串聯 | AI 文字 @帳號 / 創作者清單 / 媒體 / 熱力圖格 → 點擊回填搜尋/篩選對應貼文（原 Index.html 有 @mention 跳表格） | ⬜ |
+| P1 | 情感分析 | **輿情核心缺口**：貼文/留言 正/負/中 標記 → 佔比 + 負面突增訊號 + AI 成因；建議 n8n 入庫時批次標記（省即時 token），加 `sentiment` 欄 | ⬜ |
+| P2 | 內容主題聚類 | 原 Index.html 第 ⑧ 模塊「內容主題洞察」：貼文按主題分群 | ⬜ |
+| P2 | Chat 升級 | 串流逐字輸出 + 後續問題 chip（`===FOLLOWUPS===`）+ @mention 可點 | ⬜ |
+| P2 | 全頁 loading 骨架 | 總覽/趨勢資料到位前的骨架 | ⬜ |
+| P3 | 主動告警 | 破圈/負面突增 → email/Slack | ⬜ |
+| P3 | 競品對標 | 等 n8n 競品 flow（schema 已備，零重工） | ⬜ |
+| P3 | Email 日報 | `subscribers` 表 + n8n email 節點 | ⬜ |
+| P3 | Supabase Auth | 取代 token gate | ⬜ |
+
+## 10. 已知問題 / 注意
+
+- **OpenRouter 額度偏低**（free tier，曾回 402）：複雜多輪查詢可能中斷；持續用需儲值；maxTokens 已壓低。
+- **雜訊日期**：見上表 P0；預設 30 天視窗已避開，手動選 >60 天會切週桶。
+- **整合測試**需 `.env.local`（有 Supabase 憑證才跑，否則 skip）。
+- **Next 16 / Tailwind v4** 與舊版差異：`proxy.ts`（非 middleware）、`@theme`（非 config）。
+
+## 11. 關鍵檔案地圖
+
+```
+webapp/
+  src/proxy.ts                      token gate
+  src/lib/config.ts                 DEFAULT_BRAND
+  src/lib/supabase/server.ts        service-role client
+  src/lib/domain/                   types / platforms / normalize / engagement(+2σ) / aggregate(KPI/trends/breakouts/heatmap)
+  src/lib/data/                     posts.ts（queryPosts/getKpis）, reports.ts
+  src/lib/ai/                       tools / agent / openrouter / prompts / stats / types
+  src/app/api/                      data/* , insight/{day,module,''} , report , chat
+  src/components/monitor/           MonitorClient, OverviewSummary, PostsTable, DayDetailModal, PostDetailModal,
+                                    ModuleInsightModal, ChatWidget, BrandSelector, DateRangePicker, columns, exportCsv
+  src/components/insight/           InsightClient, MiniViz, Heatmap
+  src/components/Modal.tsx, Nav.tsx
+  supabase/migrations/              0001..0004
+  scripts/backfill.ts               xlsx → posts
+  docs/PROJECT.md（本檔）, docs/n8n-integration.md
+```
