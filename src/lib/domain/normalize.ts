@@ -8,8 +8,9 @@ function num(v: unknown): number | null {
 }
 
 function str(v: unknown): string | null {
-  if (v === null || v === undefined || v === '') return null;
-  return String(v);
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();   // 去除前後空白／換行（來源資料常見尾隨 \r\n）
+  return s === '' ? null : s;
 }
 
 /** Post Time 可能是字串、JS Date，或 Excel 序列號（xlsx 數字日期格）。回傳 ISO 或 null。 */
