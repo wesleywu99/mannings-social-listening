@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { DEFAULT_BRAND } from '@/lib/config';
 import { AIText } from '@/components/monitor/aiText';
 import { MiniKpis, MiniBars, CreatorList } from './MiniViz';
+import { Heatmap } from './Heatmap';
 
 interface Report {
   summary: string; advice: string; content: string; platform: string; kol: string; igRate: string;
@@ -14,6 +15,7 @@ interface Stats {
   byMedia?: { groups: Grp[] };
   creators?: { creators: { username: string; posts: number; totalEngagement: number }[] };
   igTier?: { tiers: { tier: string; avgEngagementRate: number }[] };
+  heatmap?: { matrix: number[][]; max: number; best: { weekday: number; hour: number; avg: number } | null };
 }
 
 const SECTIONS: { key: keyof Report; num: string; title: string }[] = [
@@ -151,6 +153,20 @@ export function InsightClient() {
               </section>
             );
           })}
+
+          {/* 07 發文時段熱度（純數據模塊，全寬）*/}
+          {stats?.heatmap && stats.heatmap.max > 0 && (
+            <section className="bg-surface rounded-2xl border border-outline-variant card-shadow overflow-hidden">
+              <div className="px-7 py-4 flex items-center gap-3 border-b border-outline-variant/60">
+                <span className="font-mono text-xs font-semibold text-on-surface-variant/40 tracking-widest">07</span>
+                <h2 className="text-base font-semibold text-on-surface">發文時段熱度</h2>
+                <span className="text-[11px] text-on-surface-variant/50 ml-1">三平台合計，每格 = 該時段平均互動量</span>
+              </div>
+              <div className="px-7 py-6">
+                <Heatmap matrix={stats.heatmap.matrix} max={stats.heatmap.max} best={stats.heatmap.best} />
+              </div>
+            </section>
+          )}
         </div>
       )}
     </div>

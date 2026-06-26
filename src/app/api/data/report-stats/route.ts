@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { buildTools } from '@/lib/ai/tools';
+import { queryPosts } from '@/lib/data/posts';
+import { computeHeatmap } from '@/lib/domain/aggregate';
 import { DEFAULT_BRAND } from '@/lib/config';
 import type { Scope } from '@/lib/ai/types';
 
@@ -15,13 +17,15 @@ export async function GET(req: NextRequest) {
   };
   try {
     const tools = Object.fromEntries(buildTools(scope).map((t) => [t.name, t]));
-    const [byPlatform, byMedia, creators, igTier] = await Promise.all([
+    const [byPlatform, byMedia, creators, igTier, allPosts] = await Promise.all([
       tools.aggregate_metrics.run({ group_by: 'platform' }),
       tools.aggregate_metrics.run({ group_by: 'media_type' }),
       tools.top_creators.run({ limit: 5 }),
       tools.ig_tier_analysis.run({}),
+      queryPosts({ brand: scope.brand, dateStart: scope.dateStart, dateEnd: scope.dateEnd }),
     ]);
-    return NextResponse.json({ byPlatform, byMedia, creators, igTier });
+    const heatmap = computeHeatmap(allPosts);
+    return NextResponse.json({ byPlatform, byMedia, creators, igTier, heatmap });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

@@ -27,6 +27,36 @@ export interface TrendPoint {
   posts: number; // 該桶貼文數
 }
 
+export interface Heatmap {
+  matrix: number[][]; // [weekday 0=Sun..6=Sat][hour 0..23] = 平均互動量
+  max: number;
+  best: { weekday: number; hour: number; avg: number } | null;
+}
+
+/** 發文時段熱力圖：每格 = 該（星期, 小時）的平均互動量（本地時區）。 */
+export function computeHeatmap(posts: Post[]): Heatmap {
+  const sum = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  const cnt = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  for (const p of posts) {
+    const d = new Date(p.postTime);
+    if (Number.isNaN(d.getTime())) continue;
+    const wd = d.getDay();
+    const h = d.getHours();
+    sum[wd][h] += p.engagementTotal ?? 0;
+    cnt[wd][h] += 1;
+  }
+  let max = 0;
+  let best: Heatmap['best'] = null;
+  const matrix = sum.map((row, wd) =>
+    row.map((s, h) => {
+      const avg = cnt[wd][h] ? Math.round(s / cnt[wd][h]) : 0;
+      if (avg > max) { max = avg; best = { weekday: wd, hour: h, avg }; }
+      return avg;
+    }),
+  );
+  return { matrix, max, best };
+}
+
 /** 一個時間桶的破圈旗標：eff=效率破圈（少帖高互動），peak=聲量高峰 */
 export interface BreakoutFlag {
   eff: boolean;
