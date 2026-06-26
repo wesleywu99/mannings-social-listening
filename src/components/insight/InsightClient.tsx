@@ -85,9 +85,9 @@ export function InsightClient() {
       {report && (
         <div className="space-y-6">
           {SECTIONS.map((s) => (
-            <section key={s.key} className="bg-surface rounded-3xl border border-outline-variant/20 card-shadow overflow-hidden">
+            <section key={s.key} className="bg-surface rounded-2xl border border-outline-variant card-shadow overflow-hidden">
               <div className="px-7 py-5 flex items-center gap-3 border-b border-outline-variant/10">
-                <span className="text-xs font-black text-ai-highlight tracking-widest opacity-70">{s.num}</span>
+                <span className="text-xs font-bold text-on-surface-variant/40 tracking-widest">{s.num}</span>
                 <h2 className="text-base font-bold text-on-surface">{s.title}</h2>
               </div>
               <div className="px-7 py-6 text-sm leading-relaxed text-on-surface">

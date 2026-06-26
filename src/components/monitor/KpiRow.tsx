@@ -8,11 +8,11 @@ export function KpiRow({ kpi }: { kpi: PlatformKpis }) {
     { label: '爆款貼文率', value: `${(kpi.anomalyRate * 100).toFixed(1)}%` },
   ];
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
       {cards.map((c) => (
-        <div key={c.label} className="bg-surface p-6 rounded-2xl border border-outline-variant/20 card-shadow">
+        <div key={c.label} className="bg-surface p-6 rounded-2xl border border-outline-variant card-shadow">
           <span className="text-[10px] font-bold text-on-surface-variant/50 uppercase tracking-widest">{c.label}</span>
-          <div className="text-3xl font-black text-on-surface mt-1">{c.value}</div>
+          <div className="text-3xl font-bold tabular-nums text-on-surface mt-1.5">{c.value}</div>
         </div>
       ))}
     </div>

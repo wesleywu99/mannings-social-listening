@@ -1,17 +1,18 @@
 @import "tailwindcss";
 
 /* 來自 new/數據監測工作台.html 的設計 token（Tailwind v4 用 @theme 定義） */
+/* 極簡 SaaS 風格（參考 DESIGN-vercel.md）：近白畫布、近黑墨色、細灰邊線、灰階文字階梯 */
 @theme {
-  --color-primary: #3751c5;
+  --color-primary: #2563eb;          /* 強調藍，僅用於連結/作用中狀態，少量使用 */
   --color-on-primary: #ffffff;
-  --color-ai-highlight: #5b73e8;
-  --color-ai-hover: #4a61d0;
-  --color-background: #fbf8ff;
+  --color-ai-highlight: #2563eb;
+  --color-ai-hover: #1d4ed8;
+  --color-background: #fafafa;
   --color-surface: #ffffff;
-  --color-surface-container: #f4f4f5;
-  --color-on-surface: #1a1b22;
-  --color-on-surface-variant: #444653;
-  --color-outline-variant: #e3e1ec;
+  --color-surface-container: #f1f5f9;
+  --color-on-surface: #0f172a;       /* 近黑墨色：大數字、標題 */
+  --color-on-surface-variant: #475569; /* 次要文字 */
+  --color-outline-variant: #e2e8f0;  /* 細灰邊線 hairline */
   --color-sentiment-pos: #10b981;
   --color-sentiment-neg: #ef4444;
   --color-facebook: #5577ba;
@@ -22,15 +23,15 @@
 }
 
 body {
-  background: #fbfbff;
+  background: var(--color-background);
   color: var(--color-on-surface);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* mockup 自訂 utilities */
-.card-shadow { box-shadow: 0 10px 40px rgba(0, 0, 0, 0.02); }
-.active-brand-glow { box-shadow: 0 0 25px rgba(55, 81, 197, 0.15); }
+/* 極簡：以 1px 細邊為主，陰影僅微弱 whisper */
+.card-shadow { box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
+.active-brand-glow { box-shadow: none; }
 .table-row-hover:hover { background-color: #f8f9fa; }
 .no-border-table th, .no-border-table td { border: none !important; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }

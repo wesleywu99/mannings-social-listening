@@ -78,7 +78,7 @@ export function MonitorClient() {
       <section className="space-y-8">
         <PlatformTabs value={platform} onChange={setPlatform} />
         {kpi && <KpiRow kpi={kpi} />}
-        <div className="bg-surface rounded-3xl card-shadow overflow-hidden border border-outline-variant/20">
+        <div className="bg-surface rounded-2xl card-shadow overflow-hidden border border-outline-variant">
           <div className="px-8 py-6 flex items-center gap-3 border-b border-outline-variant/10">
             <h3 className="text-lg font-extrabold capitalize">{platform} 數據監測</h3>
             <div className="h-4 w-px bg-outline-variant" />

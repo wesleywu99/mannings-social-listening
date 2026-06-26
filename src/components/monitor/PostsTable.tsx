@@ -120,7 +120,7 @@ export function PostsTable({
                     <td
                       key={c.label}
                       className={`px-4 py-3.5 text-center tabular-nums ${
-                        c.primary ? 'font-extrabold text-primary' : 'text-on-surface'
+                        c.primary ? 'font-bold text-on-surface' : 'text-on-surface-variant'
                       }`}
                     >
                       {(c.get(p) ?? 0).toLocaleString()}
