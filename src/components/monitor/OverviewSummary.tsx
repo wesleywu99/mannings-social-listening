@@ -85,6 +85,13 @@ export function OverviewSummary({
   const flags = detectBreakouts(engSeries, postSeries);
   const breakCount = flags.filter((f) => f.eff || f.peak).length;
 
+  // 桶粒度：相鄰兩桶間隔 >1.5 天視為「週桶」→ 鑽取時抓整週而非單日
+  const weekly = days.length >= 2 && (Date.parse(`${days[1]}T00:00:00`) - Date.parse(`${days[0]}T00:00:00`)) > 86400000 * 1.5;
+  const addDays = (s: string, n: number) => {
+    const d = new Date(`${s}T00:00:00`); d.setDate(d.getDate() + n);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
   const tiles = [
     { label: 'Total posts', value: totalPosts.toLocaleString(), cur: totalPosts, prev: prevTotalPosts },
     { label: 'Total engagement', value: totalEng.toLocaleString(), cur: totalEng, prev: prevTotalEng },
@@ -162,7 +169,9 @@ export function OverviewSummary({
 
       {sel != null && days[sel] && (
         <DayDetailModal
-          date={days[sel]}
+          rangeStart={days[sel]}
+          rangeEnd={weekly ? addDays(days[sel], 6) : days[sel]}
+          weekly={weekly}
           scope={scope}
           breakout={flags[sel] ?? null}
           periodAvgEpp={avg}

@@ -5,11 +5,11 @@ export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
-    const { date, scope } = await req.json();
-    if (!date || !scope?.brand) {
-      return NextResponse.json({ error: 'date and scope.brand required' }, { status: 400 });
+    const { start, end, scope } = await req.json();
+    if (!start || !scope?.brand) {
+      return NextResponse.json({ error: 'start and scope.brand required' }, { status: 400 });
     }
-    const insight = await runDayInsight(date, scope);
+    const insight = await runDayInsight(start, end ?? start, scope);
     return NextResponse.json(insight);
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

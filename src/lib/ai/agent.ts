@@ -61,21 +61,22 @@ export async function runChat(
 
 export interface DayInsight { topic: string; cause: string; actions: string; }
 
-/** 單日破圈解讀：抓當天（全平台）貼文 + 統計 → AI 產出 主題/成因/行動點 */
-export async function runDayInsight(date: string, scope: Scope): Promise<DayInsight> {
+/** 破圈區間解讀（日桶/週桶通用）：抓區間內（全平台）貼文 + 統計 → AI 產出 主題/成因/行動點 */
+export async function runDayInsight(start: string, end: string, scope: Scope): Promise<DayInsight> {
   const posts = await queryPosts({
     brand: scope.brand,
-    dateStart: `${date}T00:00:00`,
-    dateEnd: `${date}T23:59:59`,
+    dateStart: `${start}T00:00:00`,
+    dateEnd: `${end}T23:59:59`,
   });
   const engs = posts.map((p) => p.engagementTotal ?? 0);
   const totalEng = engs.reduce((a, b) => a + b, 0);
   const epp = posts.length ? Math.round(totalEng / posts.length) : 0;
   const top = [...posts].sort((a, b) => (b.engagementTotal ?? 0) - (a.engagementTotal ?? 0)).slice(0, 10);
+  const span = start === end ? `日期=${start}` : `期間=${start}~${end}`;
 
   const ctx = [
-    `【當日統計】日期=${date}，貼文數=${posts.length}，總互動=${totalEng}，每帖互動=${epp}`,
-    '【當日 Top 貼文】',
+    `【區間統計】${span}，貼文數=${posts.length}，總互動=${totalEng}，每帖互動=${epp}`,
+    '【區間 Top 貼文】',
     ...top.map((p, i) =>
       `${i + 1}. [${p.platform}] @${p.username ?? ''} 互動=${p.engagementTotal ?? 0}${p.followerCount != null ? ` 粉絲=${p.followerCount}` : ''}｜${(p.content ?? '').slice(0, 160)}`,
     ),

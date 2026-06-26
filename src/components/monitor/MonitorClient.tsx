@@ -46,6 +46,7 @@ export function MonitorClient() {
   const [trends, setTrends] = useState<Record<Platform, TrendPoint[]>>({} as Record<Platform, TrendPoint[]>);
   const [prevKpis, setPrevKpis] = useState<PlatformKpis[]>([]);
   const [loading, setLoading] = useState(false);
+  const [booted, setBooted] = useState(false);
 
   useEffect(() => {
     fetch('/api/data/brands')
@@ -54,7 +55,29 @@ export function MonitorClient() {
       .catch(() => setBrands([]));
   }, []);
 
+  // 開機：取資料實際範圍 → 預設聚焦最近 30 天密集視窗（避免雜訊日期把圖撐成整年）
   useEffect(() => {
+    let alive = true;
+    fetch(`/api/data/range?brand=${encodeURIComponent(brand)}`)
+      .then((r) => r.json())
+      .then((rg: { start?: string; end?: string }) => {
+        if (!alive) return;
+        if (rg?.end) {
+          const maxD = new Date(`${rg.end}T00:00:00`);
+          const back = new Date(maxD); back.setDate(maxD.getDate() - 29);
+          const minD = rg.start ? new Date(`${rg.start}T00:00:00`) : back;
+          const startD = back < minD ? minD : back;
+          const f = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          setStart(f(startD)); setEnd(rg.end);
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (alive) setBooted(true); });
+    return () => { alive = false; };
+  }, [brand]);
+
+  useEffect(() => {
+    if (!booted) return;
     setLoading(true);
     const range = (p: URLSearchParams) => {
       if (start) p.set('start', `${start}T00:00:00`);
@@ -95,7 +118,7 @@ export function MonitorClient() {
         }
       })
       .finally(() => setLoading(false));
-  }, [brand, platform, start, end]);
+  }, [brand, platform, start, end, booted]);
 
   const kpi = kpis.find((k) => k.platform === platform);
   const population = posts.map((p) => p.engagementTotal ?? 0);

@@ -16,13 +16,17 @@ const WK = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'
 interface DayInsight { topic: string; cause: string; actions: string; }
 
 export function DayDetailModal({
-  date,
+  rangeStart,
+  rangeEnd,
+  weekly,
   scope,
   breakout,
   periodAvgEpp,
   onClose,
 }: {
-  date: string;
+  rangeStart: string;
+  rangeEnd: string;
+  weekly: boolean;
   scope: Scope;
   breakout: { eff: boolean; peak: boolean } | null;
   periodAvgEpp: number;
@@ -34,13 +38,14 @@ export function DayDetailModal({
   const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
-    const qs = new URLSearchParams({ brand: scope.brand, start: `${date}T00:00:00`, end: `${date}T23:59:59`, limit: '500' });
+    setLoading(true);
+    const qs = new URLSearchParams({ brand: scope.brand, start: `${rangeStart}T00:00:00`, end: `${rangeEnd}T23:59:59`, limit: '500' });
     fetch(`/api/data/posts?${qs}`)
       .then((r) => r.json())
       .then((d) => setPosts(Array.isArray(d) ? d : []))
       .catch(() => setPosts([]))
       .finally(() => setLoading(false));
-  }, [date, scope.brand]);
+  }, [rangeStart, rangeEnd, scope.brand]);
 
   const stats = useMemo(() => {
     const totalEng = posts.reduce((s, p) => s + (p.engagementTotal ?? 0), 0);
@@ -60,15 +65,17 @@ export function DayDetailModal({
   }, [posts]);
 
   const xAvg = periodAvgEpp ? stats.epp / periodAvgEpp : 0;
-  const weekday = (() => { const d = new Date(`${date}T00:00:00`); return Number.isNaN(d.getTime()) ? '' : WK[d.getDay()]; })();
+  const weekday = (() => { const d = new Date(`${rangeStart}T00:00:00`); return Number.isNaN(d.getTime()) ? '' : WK[d.getDay()]; })();
+  const title = weekly ? `${rangeStart} ~ ${rangeEnd}` : `${rangeStart} · ${weekday}`;
   const badge = breakout?.eff ? '效率破圈' : breakout?.peak ? '聲量高峰' : null;
+  const empty = !loading && stats.count === 0;
 
   const runAI = async () => {
     setAiLoading(true);
     try {
       const res = await fetch('/api/insight/day', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, scope }),
+        body: JSON.stringify({ start: rangeStart, end: rangeEnd, scope }),
       });
       const d = await res.json();
       setAi(d.error ? { topic: '生成失敗：' + d.error, cause: '', actions: '' } : d);
@@ -78,6 +85,8 @@ export function DayDetailModal({
       setAiLoading(false);
     }
   };
+
+  const Sk = ({ w = 'w-full' }: { w?: string }) => <span className={`inline-block h-3 rounded bg-surface-container animate-pulse ${w}`} />;
 
   return (
     <Modal onClose={onClose} maxWidth="640px">
@@ -89,118 +98,104 @@ export function DayDetailModal({
                 <span className="w-1.5 h-1.5 rounded-full bg-sentiment-neg" /> Breakout · {badge}
               </span>
             ) : (
-              <span className="font-mono text-[10px] uppercase tracking-wide text-on-surface-variant/50">Daily detail</span>
+              <span className="font-mono text-[10px] uppercase tracking-wide text-on-surface-variant/50">{weekly ? 'Weekly detail' : 'Daily detail'}</span>
             )}
-            <h3 className="text-xl font-semibold tracking-tight mt-2.5">{date} · {weekday}</h3>
-            <p className="text-[13px] text-on-surface-variant mt-1">
-              {loading ? '載入中…' : (
-                <>當日 <b className="text-on-surface tabular-nums">{stats.count}</b> 帖 · <b className="text-on-surface tabular-nums">{stats.totalEng.toLocaleString()}</b> 互動 · 每帖 <b className="text-on-surface tabular-nums">{stats.epp.toLocaleString()}</b>{xAvg ? <>（<b className="text-on-surface">×{xAvg.toFixed(1)}</b> 期間平均）</> : null}</>
-              )}
+            <h3 className="text-xl font-semibold tracking-tight mt-2.5">{title}</h3>
+            <p className="text-[13px] text-on-surface-variant mt-1 min-h-[20px]">
+              {loading ? <Sk w="w-56" />
+                : empty ? '此區間無貼文資料'
+                : <>共 <b className="text-on-surface tabular-nums">{stats.count}</b> 帖 · <b className="text-on-surface tabular-nums">{stats.totalEng.toLocaleString()}</b> 互動 · 每帖 <b className="text-on-surface tabular-nums">{stats.epp.toLocaleString()}</b>{xAvg ? <>（<b className="text-on-surface">×{xAvg.toFixed(1)}</b> 期間平均）</> : null}</>}
             </p>
           </div>
 
           <div className="px-6 py-5 flex flex-col gap-4">
-            {/* 統計卡 */}
-            <div className="grid grid-cols-3 gap-2.5">
-              {[
-                { l: 'Engagement', v: stats.totalEng.toLocaleString() },
-                { l: 'Posts', v: String(stats.count) },
-                { l: 'Eng / post', v: stats.epp.toLocaleString(), x: xAvg ? `×${xAvg.toFixed(1)} avg` : '' },
-              ].map((c) => (
-                <div key={c.l} className="border border-outline-variant rounded-xl px-3.5 py-3">
-                  <div className="text-[9px] font-bold uppercase tracking-widest text-faint">{c.l}</div>
-                  <div className="text-xl font-semibold tabular-nums mt-1">{c.v}</div>
-                  {c.x && <div className="text-[11px] font-semibold text-sentiment-pos mt-0.5">{c.x}</div>}
-                </div>
-              ))}
-            </div>
-
-            {/* 平台占比：Vercel 風乾淨列表（無色條） */}
-            {stats.split.length > 0 && (
-              <div>
-                <div className="font-mono text-[10px] font-semibold uppercase tracking-wide text-mute mb-2">Engagement by platform</div>
-                <div className="border border-outline-variant rounded-xl overflow-hidden">
-                  {stats.split.map((s) => (
-                    <div key={s.platform} className="flex items-center justify-between px-3.5 py-2.5 border-b last:border-b-0 border-outline-variant/60">
-                      <span className="flex items-center gap-2 text-[13px] text-on-surface">
-                        <span className={`w-1.5 h-1.5 rounded-full ${META[s.platform].dot}`} /> {META[s.platform].label}
-                      </span>
-                      <span className="flex items-baseline gap-2.5">
-                        <span className="text-[13px] font-semibold tabular-nums">{s.eng.toLocaleString()}</span>
-                        <span className="text-[11px] text-mute tabular-nums w-9 text-right">{s.share.toFixed(0)}%</span>
-                      </span>
+            {empty ? (
+              <div className="border border-dashed border-outline-variant rounded-xl py-12 text-center text-[13px] text-mute">此區間沒有貼文。</div>
+            ) : (
+              <>
+                {/* 統計卡 */}
+                <div className="grid grid-cols-3 gap-2.5">
+                  {[
+                    { l: 'Engagement', v: stats.totalEng.toLocaleString() },
+                    { l: 'Posts', v: String(stats.count) },
+                    { l: 'Eng / post', v: stats.epp.toLocaleString(), x: xAvg ? `×${xAvg.toFixed(1)} avg` : '' },
+                  ].map((c) => (
+                    <div key={c.l} className="border border-outline-variant rounded-xl px-3.5 py-3">
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-faint">{c.l}</div>
+                      {loading ? <div className="mt-2"><Sk w="w-12" /></div> : <div className="text-xl font-semibold tabular-nums mt-1">{c.v}</div>}
+                      {!loading && c.x && <div className="text-[11px] font-semibold text-sentiment-pos mt-0.5">{c.x}</div>}
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
 
-            {/* Top 驅動貼文 */}
-            {stats.top.length > 0 && (
-              <div>
-                <div className="font-mono text-[10px] font-semibold uppercase tracking-wide text-mute mb-2">Top driving posts</div>
-                <div className="border border-outline-variant rounded-xl px-3.5">
-                  {stats.top.map((p, i) => (
-                    <div key={p.postUrl ?? i} className="flex gap-3 py-2.5 border-b last:border-b-0 border-outline-variant/50">
-                      <span className="text-[13px] font-semibold tabular-nums w-14 text-right shrink-0">{(p.engagementTotal ?? 0).toLocaleString()}</span>
-                      <span className="min-w-0">
-                        <span className="block text-[12.5px] text-on-surface-variant truncate">{p.content || '—'}</span>
-                        <span className="block text-[11px] text-mute mt-0.5">@{p.username} · {META[p.platform].label}{p.mediaType ? ` · ${p.mediaType}` : ''}</span>
-                      </span>
+                {/* 平台占比：Vercel 風列表（無色條） */}
+                {!loading && stats.split.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] font-semibold uppercase tracking-wide text-mute mb-2">Engagement by platform</div>
+                    <div className="border border-outline-variant rounded-xl overflow-hidden">
+                      {stats.split.map((s) => (
+                        <div key={s.platform} className="flex items-center justify-between px-3.5 py-2.5 border-b last:border-b-0 border-outline-variant/60">
+                          <span className="flex items-center gap-2 text-[13px] text-on-surface"><span className={`w-1.5 h-1.5 rounded-full ${META[s.platform].dot}`} /> {META[s.platform].label}</span>
+                          <span className="flex items-baseline gap-2.5"><span className="text-[13px] font-semibold tabular-nums">{s.eng.toLocaleString()}</span><span className="text-[11px] text-mute tabular-nums w-9 text-right">{s.share.toFixed(0)}%</span></span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                  </div>
+                )}
 
-            {/* 內容組成 */}
-            {stats.mix.length > 0 && (
-              <div>
-                <div className="font-mono text-[10px] font-semibold uppercase tracking-wide text-mute mb-2">Content mix</div>
-                <div className="flex gap-2 flex-wrap">
-                  {stats.mix.map((m) => (
-                    <span key={m.type} className="text-[11px] text-on-surface-variant border border-outline-variant rounded-lg px-2.5 py-1">
-                      {m.type} <b className="text-on-surface">{m.pct}%</b>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+                {/* Top 驅動貼文 */}
+                {!loading && stats.top.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] font-semibold uppercase tracking-wide text-mute mb-2">Top driving posts</div>
+                    <div className="border border-outline-variant rounded-xl px-3.5">
+                      {stats.top.map((p, i) => (
+                        <div key={p.postUrl ?? i} className="flex gap-3 py-2.5 border-b last:border-b-0 border-outline-variant/50">
+                          <span className="text-[13px] font-semibold tabular-nums w-14 text-right shrink-0">{(p.engagementTotal ?? 0).toLocaleString()}</span>
+                          <span className="min-w-0">
+                            <span className="block text-[12.5px] text-on-surface-variant truncate">{p.content || '—'}</span>
+                            <span className="block text-[11px] text-mute mt-0.5">@{p.username} · {META[p.platform].label}{p.mediaType ? ` · ${p.mediaType}` : ''}</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-            {/* AI 深度解讀 */}
-            <div>
-              <div className="font-mono text-[10px] font-semibold uppercase tracking-wide text-mute mb-2">
-                <span className="text-[#3b5bdb] bg-[#eef1ff] border border-[#dbe1ff] rounded px-1.5 py-0.5 mr-1.5">AI</span>深度解讀
-              </div>
-              {ai ? (
-                <div className="border border-outline-variant rounded-xl p-4 bg-[#fcfcfd] flex flex-col gap-3.5">
-                  <div><div className="text-[12px] font-bold mb-1">主要討論主題</div><div className="text-[13px] leading-relaxed text-on-surface-variant"><AIText text={ai.topic} /></div></div>
-                  {ai.cause && <div><div className="text-[12px] font-bold mb-1">為何爆發</div><div className="text-[13px] leading-relaxed text-on-surface-variant"><AIText text={ai.cause} /></div></div>}
-                  {ai.actions && <div><div className="text-[12px] font-bold mb-1">可複製的行動點</div><div className="text-[13px] leading-relaxed text-on-surface-variant"><AIText text={ai.actions} /></div></div>}
+                {/* 內容組成 */}
+                {!loading && stats.mix.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] font-semibold uppercase tracking-wide text-mute mb-2">Content mix</div>
+                    <div className="flex gap-2 flex-wrap">
+                      {stats.mix.map((m) => <span key={m.type} className="text-[11px] text-on-surface-variant border border-outline-variant rounded-lg px-2.5 py-1">{m.type} <b className="text-on-surface">{m.pct}%</b></span>)}
+                    </div>
+                  </div>
+                )}
+
+                {/* AI 深度解讀 */}
+                <div>
+                  <div className="font-mono text-[10px] font-semibold uppercase tracking-wide text-mute mb-2">
+                    <span className="text-[#3b5bdb] bg-[#eef1ff] border border-[#dbe1ff] rounded px-1.5 py-0.5 mr-1.5">AI</span>深度解讀
+                  </div>
+                  {ai ? (
+                    <div className="border border-outline-variant rounded-xl p-4 bg-[#fcfcfd] flex flex-col gap-3.5">
+                      <div><div className="text-[12px] font-bold mb-1">主要討論主題</div><div className="text-[13px] leading-relaxed text-on-surface-variant"><AIText text={ai.topic} /></div></div>
+                      {ai.cause && <div><div className="text-[12px] font-bold mb-1">為何爆發</div><div className="text-[13px] leading-relaxed text-on-surface-variant"><AIText text={ai.cause} /></div></div>}
+                      {ai.actions && <div><div className="text-[12px] font-bold mb-1">可複製的行動點</div><div className="text-[13px] leading-relaxed text-on-surface-variant"><AIText text={ai.actions} /></div></div>}
+                    </div>
+                  ) : (
+                    <div className="border border-dashed border-outline-variant rounded-xl p-4 text-[13px] text-mute">點右下角「AI 解讀」生成主題、爆發成因與可複製行動點。</div>
+                  )}
                 </div>
-              ) : (
-                <div className="border border-dashed border-outline-variant rounded-xl p-4 text-[13px] text-mute">
-                  點右下角「AI 解讀」生成當日主題、爆發成因與可複製行動點。
-                </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
 
-          {/* footer：黑色 AI 按鈕 + 關閉（右下角） */}
           <div className="sticky bottom-0 flex justify-end gap-2.5 px-6 py-3.5 border-t border-outline-variant/60 bg-surface">
-            <button
-              onClick={runAI}
-              disabled={aiLoading || loading}
-              className="rounded-[10px] text-[13px] font-semibold px-4 py-2 bg-primary text-on-primary hover:bg-ai-hover transition-colors disabled:opacity-50"
-            >
+            <button onClick={runAI} disabled={aiLoading || loading || empty}
+              className="rounded-[10px] text-[13px] font-semibold px-4 py-2 bg-primary text-on-primary hover:bg-ai-hover transition-colors disabled:opacity-50">
               {aiLoading ? '分析中…' : ai ? '重新解讀' : 'AI 解讀'}
             </button>
-            <button
-              onClick={close}
-              className="rounded-[10px] text-[13px] font-semibold px-4 py-2 bg-surface text-on-surface border border-outline-variant hover:bg-surface-container transition-colors"
-            >
-              關閉
-            </button>
+            <button onClick={close} className="rounded-[10px] text-[13px] font-semibold px-4 py-2 bg-surface text-on-surface border border-outline-variant hover:bg-surface-container transition-colors">關閉</button>
           </div>
         </>
       )}
