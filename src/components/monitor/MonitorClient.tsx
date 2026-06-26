@@ -4,7 +4,6 @@ import type { Platform, Post, PlatformKpis } from '@/lib/domain/types';
 import type { TrendPoint } from '@/lib/domain/aggregate';
 import { BrandSelector, type BrandRow } from './BrandSelector';
 import { PlatformTabs } from './PlatformTabs';
-import { KpiRow } from './KpiRow';
 import { PostsTable } from './PostsTable';
 import { OverviewSummary } from './OverviewSummary';
 import { DateRangePicker } from './DateRangePicker';
@@ -120,7 +119,6 @@ export function MonitorClient() {
       .finally(() => setLoading(false));
   }, [brand, platform, start, end, booted]);
 
-  const kpi = kpis.find((k) => k.platform === platform);
   const population = posts.map((p) => p.engagementTotal ?? 0);
 
   // chat / 解讀 共用範圍：以 brand + 日期為硬性篩選；platform 不鎖（讓 AI 跨平台分析）
@@ -153,7 +151,6 @@ export function MonitorClient() {
 
       <section className="space-y-8">
         <PlatformTabs value={platform} onChange={setPlatform} />
-        {kpi && <KpiRow kpi={kpi} prev={prevKpis.find((x) => x.platform === platform)} />}
         <div className="bg-surface rounded-2xl card-shadow overflow-hidden border border-outline-variant">
           <div className="px-8 py-6 flex items-center gap-3 border-b border-outline-variant/10">
             <h3 className="text-lg font-semibold">{PLATFORM_LABEL[platform]}</h3>

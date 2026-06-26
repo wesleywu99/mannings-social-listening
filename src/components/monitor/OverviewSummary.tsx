@@ -135,6 +135,7 @@ export function OverviewSummary({
               <th className="font-medium px-4 py-3 border-b border-outline-variant">Posts</th>
               <th className="font-medium px-4 py-3 border-b border-outline-variant">Engagement</th>
               <th className="font-medium px-4 py-3 border-b border-outline-variant">Avg</th>
+              <th className="font-medium px-4 py-3 border-b border-outline-variant">Outlier %</th>
               <th className="font-medium px-4 py-3 border-b border-outline-variant">Share</th>
               <th className="font-medium px-5 py-3 border-b border-outline-variant">Δ vs last</th>
             </tr>
@@ -154,6 +155,7 @@ export function OverviewSummary({
                   <td className="px-4 py-3.5 text-xs tabular-nums text-on-surface-variant">{k.postCount.toLocaleString()}</td>
                   <td className={`px-4 py-3.5 text-sm tabular-nums ${isLeader ? 'font-semibold text-on-surface' : 'text-on-surface-variant'}`}>{k.totalEngagement.toLocaleString()}</td>
                   <td className="px-4 py-3.5 text-xs tabular-nums text-on-surface-variant">{k.avgEngagement.toLocaleString()}</td>
+                  <td className="px-4 py-3.5 text-xs tabular-nums text-on-surface-variant">{(k.anomalyRate * 100).toFixed(1)}%</td>
                   <td className="px-4 py-3.5 text-xs tabular-nums text-on-surface-variant">{share.toFixed(0)}%</td>
                   <td className="px-5 py-3.5">
                     <span className="inline-flex justify-end w-full">
