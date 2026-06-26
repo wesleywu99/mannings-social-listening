@@ -5,10 +5,17 @@ import { PerspectiveSwitcher, type BrandRow } from './PerspectiveSwitcher';
 import { PlatformTabs } from './PlatformTabs';
 import { KpiRow } from './KpiRow';
 import { PostsTable } from './PostsTable';
+import { OverviewSummary } from './OverviewSummary';
 import { DateRangePicker } from './DateRangePicker';
 import { ChatWidget } from './ChatWidget';
 import { DEFAULT_BRAND } from '@/lib/config';
 import type { Scope } from '@/lib/ai/types';
+
+const PLATFORM_LABEL: Record<Platform, string> = {
+  ig: 'Instagram',
+  threads: 'Threads',
+  fb: 'Facebook',
+};
 
 export function MonitorClient() {
   const [brands, setBrands] = useState<BrandRow[]>([]);
@@ -75,12 +82,14 @@ export function MonitorClient() {
         onSelect={setBrand}
       />
 
+      <OverviewSummary kpis={kpis} />
+
       <section className="space-y-8">
         <PlatformTabs value={platform} onChange={setPlatform} />
         {kpi && <KpiRow kpi={kpi} />}
         <div className="bg-surface rounded-2xl card-shadow overflow-hidden border border-outline-variant">
           <div className="px-8 py-6 flex items-center gap-3 border-b border-outline-variant/10">
-            <h3 className="text-lg font-extrabold capitalize">{platform} 數據監測</h3>
+            <h3 className="text-lg font-extrabold">{PLATFORM_LABEL[platform]}</h3>
             <div className="h-4 w-px bg-outline-variant" />
             <span className="text-xs text-on-surface-variant font-medium">
               共 {posts.length} 筆{(start || end) && '（已篩選日期）'} · <span className="text-sentiment-neg font-bold">●</span> 代表 +2σ 爆款
