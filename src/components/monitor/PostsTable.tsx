@@ -13,11 +13,13 @@ export function PostsTable({
   population,
   platform,
   scope,
+  closeSignal = 0,
 }: {
   posts: Post[];
   population: number[];
   platform: Platform;
   scope: Scope;
+  closeSignal?: number;
 }) {
   const [selected, setSelected] = useState<Post | null>(null);
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'Engagement', dir: 'desc' });
@@ -30,6 +32,11 @@ export function PostsTable({
   useEffect(() => {
     setSort({ key: 'Engagement', dir: 'desc' });
   }, [platform]);
+
+  // 點 @帳號 篩選時，關閉開啟中的貼文彈窗
+  useEffect(() => {
+    if (closeSignal > 0) setSelected(null);
+  }, [closeSignal]);
 
   const sortValue = (p: Post, key: string): number => {
     if (key === TIME_KEY) return new Date(p.postTime).getTime();

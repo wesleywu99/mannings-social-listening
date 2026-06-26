@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { PlatformKpis, Platform } from '@/lib/domain/types';
 import { type TrendPoint, detectBreakouts, type BreakoutFlag } from '@/lib/domain/aggregate';
 import type { Scope } from '@/lib/ai/types';
@@ -57,14 +57,16 @@ function TrendChart({
 }
 
 export function OverviewSummary({
-  kpis, prevKpis, trends, scope,
+  kpis, prevKpis, trends, scope, closeSignal = 0,
 }: {
   kpis: PlatformKpis[];
   prevKpis?: PlatformKpis[];
   trends: Record<Platform, TrendPoint[]>;
   scope: Scope;
+  closeSignal?: number;
 }) {
   const [sel, setSel] = useState<number | null>(null);
+  useEffect(() => { if (closeSignal > 0) setSel(null); }, [closeSignal]);
 
   const totalPosts = kpis.reduce((s, k) => s + k.postCount, 0);
   const totalEng = kpis.reduce((s, k) => s + k.totalEngagement, 0);

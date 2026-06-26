@@ -11,6 +11,7 @@ import { buildPostsCsv, downloadCsv } from './exportCsv';
 import { DateRangePicker } from './DateRangePicker';
 import { DateRangePresets } from './DateRangePresets';
 import { ChatWidget } from './ChatWidget';
+import { MentionContext } from './mentionContext';
 import { DEFAULT_BRAND } from '@/lib/config';
 import type { Scope } from '@/lib/ai/types';
 
@@ -127,6 +128,16 @@ export function MonitorClient() {
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [moduleOpen, setModuleOpen] = useState(false);
+  const [closeSignal, setCloseSignal] = useState(0);
+
+  // AI 文字點 @帳號 → 篩選貼文表 + 關閉開啟中的彈窗 + 捲到表格
+  const handleMention = (username: string) => {
+    setSearch(username);
+    setSearchOpen(true);
+    setModuleOpen(false);
+    setCloseSignal((n) => n + 1);
+    setTimeout(() => document.getElementById('posts-table-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  };
   const q = search.trim().toLowerCase();
   const shown = q
     ? posts.filter((p) => (p.content ?? '').toLowerCase().includes(q) || (p.username ?? '').toLowerCase().includes(q))
@@ -145,6 +156,7 @@ export function MonitorClient() {
   };
 
   return (
+    <MentionContext.Provider value={handleMention}>
     <div className="space-y-8">
       {/* 統一控制列：左側資料源選擇器、右側時間篩選 */}
       <div className="flex items-center justify-between gap-4 flex-wrap pb-4 border-b border-outline-variant">
@@ -163,11 +175,11 @@ export function MonitorClient() {
         </div>
       </div>
 
-      <OverviewSummary kpis={kpis} prevKpis={prevKpis} trends={trends} scope={scope} />
+      <OverviewSummary kpis={kpis} prevKpis={prevKpis} trends={trends} scope={scope} closeSignal={closeSignal} />
 
       <section className="space-y-8">
         <PlatformTabs value={platform} onChange={setPlatform} />
-        <div className="bg-surface rounded-2xl card-shadow overflow-hidden border border-outline-variant">
+        <div id="posts-table-card" className="bg-surface rounded-2xl card-shadow overflow-hidden border border-outline-variant">
           <div className="px-6 py-4 flex items-center justify-between gap-3 border-b border-outline-variant/60 flex-wrap">
             <div className="flex items-center gap-3 min-w-0">
               <h3 className="text-lg font-semibold">{PLATFORM_LABEL[platform]}</h3>
@@ -211,7 +223,7 @@ export function MonitorClient() {
               </button>
             </div>
           </div>
-          <PostsTable posts={shown} population={population} platform={platform} scope={scope} />
+          <PostsTable posts={shown} population={population} platform={platform} scope={scope} closeSignal={closeSignal} />
         </div>
       </section>
 
@@ -219,5 +231,6 @@ export function MonitorClient() {
 
       <ChatWidget scope={scope} />
     </div>
+    </MentionContext.Provider>
   );
 }
