@@ -7,6 +7,7 @@ import { Heatmap } from './Heatmap';
 
 interface Report {
   summary: string; advice: string; content: string; platform: string; kol: string; igRate: string;
+  sentiment: string;
   dateStart?: string; dateEnd?: string; generatedAt?: string;
 }
 interface Grp { group: string; postCount: number; totalEngagement: number; avgEngagement: number }
@@ -16,6 +17,7 @@ interface Stats {
   creators?: { creators: { username: string; posts: number; totalEngagement: number }[] };
   igTier?: { tiers: { tier: string; avgEngagementRate: number }[] };
   heatmap?: { matrix: number[][]; max: number; best: { weekday: number; hour: number; avg: number } | null };
+  sentiment?: { summary: { posPct: number; neuPct: number; negPct: number; pos: number; neu: number; neg: number }; spikes: { date: string; level: string }[] };
 }
 
 const SECTIONS: { key: keyof Report; num: string; title: string }[] = [
@@ -25,6 +27,7 @@ const SECTIONS: { key: keyof Report; num: string; title: string }[] = [
   { key: 'platform', num: '04', title: '平台效能對比' },
   { key: 'kol', num: '05', title: '創作者表現亮點' },
   { key: 'igRate', num: '06', title: 'IG 互動率分層' },
+  { key: 'sentiment', num: '08', title: '情感輿情' },
 ];
 const PNAME: Record<string, string> = { ig: 'Instagram', threads: 'Threads', fb: 'Facebook' };
 
@@ -59,6 +62,37 @@ function leftFor(key: keyof Report, stats: Stats | null): { title: string; node:
   if (key === 'igRate') {
     const items = (stats.igTier?.tiers ?? []).map((t) => ({ label: t.tier, value: t.avgEngagementRate }));
     return items.length ? { title: '各層平均互動率', node: <MiniBars items={items} pct /> } : null;
+  }
+  if (key === 'sentiment') {
+    const s = stats.sentiment?.summary;
+    if (!s) return null;
+    const items = [
+      { label: '正面', value: s.posPct },
+      { label: '中性', value: s.neuPct },
+      { label: '負面', value: s.negPct },
+    ];
+    const spikes = stats.sentiment?.spikes ?? [];
+    return {
+      title: '情感占比',
+      node: (
+        <div className="space-y-3">
+          <MiniBars items={items} pct />
+          {spikes.length > 0 && (
+            <div>
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-wide text-mute mb-1.5">負面突增</p>
+              <div className="space-y-1">
+                {spikes.slice(0, 5).map((sp) => (
+                  <div key={sp.date} className="flex items-center gap-1.5 text-[11px] text-on-surface-variant">
+                    <span className={`w-1.5 h-1.5 rounded-full ${sp.level === 'red' ? 'bg-sentiment-neg' : sp.level === 'orange' ? 'bg-[#f5a623]' : 'bg-[#facc15]'}`} />
+                    {sp.date}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ),
+    };
   }
   return null;
 }

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import type { PlatformKpis, Platform } from '@/lib/domain/types';
-import { type TrendPoint, detectBreakouts, type BreakoutFlag } from '@/lib/domain/aggregate';
+import type { PlatformKpis, Platform, Post } from '@/lib/domain/types';
+import { type TrendPoint, detectBreakouts, type BreakoutFlag, computeSentimentSummary, computeSentimentTrend, detectSentimentSpikes } from '@/lib/domain/aggregate';
 import type { Scope } from '@/lib/ai/types';
 import { Delta } from './Delta';
 import { DayDetailModal } from './DayDetailModal';
@@ -57,13 +57,15 @@ function TrendChart({
 }
 
 export function OverviewSummary({
-  kpis, prevKpis, trends, scope, closeSignal = 0,
+  kpis, prevKpis, trends, scope, closeSignal = 0, allPosts = [], scopeDates,
 }: {
   kpis: PlatformKpis[];
   prevKpis?: PlatformKpis[];
   trends: Record<Platform, TrendPoint[]>;
   scope: Scope;
   closeSignal?: number;
+  allPosts?: Post[];
+  scopeDates?: { start?: string; end?: string };
 }) {
   const [sel, setSel] = useState<number | null>(null);
   useEffect(() => { if (closeSignal > 0) setSel(null); }, [closeSignal]);
@@ -100,6 +102,13 @@ export function OverviewSummary({
     { label: 'Avg / post', value: avg.toLocaleString(), cur: avg, prev: prevAvg },
   ];
 
+  // 情感輿情（跨平台）
+  const sentiment = computeSentimentSummary(allPosts);
+  const sentimentTrend = computeSentimentTrend(allPosts, scopeDates?.start, scopeDates?.end);
+  const sentimentSpikes = detectSentimentSpikes(sentimentTrend);
+  const redSpike = sentimentSpikes.find((s) => s.level === 'red');
+  const hasSentiment = sentiment.total > 0;
+
   return (
     <section className="space-y-4">
       <h2 className="font-mono text-[11px] font-medium uppercase tracking-normal text-on-surface-variant/60">Cross-channel</h2>
@@ -113,6 +122,29 @@ export function OverviewSummary({
           </div>
         ))}
       </div>
+
+      {hasSentiment && (
+        <div className="bg-surface p-4 sm:p-5 rounded-2xl border border-outline-variant card-shadow">
+          <div className="flex items-center justify-between mb-2.5 flex-wrap gap-2">
+            <span className="font-mono text-[11px] font-medium uppercase tracking-normal text-on-surface-variant/60">Sentiment · 輿情健康度</span>
+            <div className="flex items-center gap-3 text-[11px] tabular-nums text-on-surface-variant">
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sentiment-pos" />正 {sentiment.pos} ({Math.round(sentiment.posPct * 100)}%)</span>
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sentiment-neu" />中 {sentiment.neu} ({Math.round(sentiment.neuPct * 100)}%)</span>
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sentiment-neg" />負 {sentiment.neg} ({Math.round(sentiment.negPct * 100)}%)</span>
+            </div>
+          </div>
+          <div className="flex h-2 rounded-full overflow-hidden bg-surface-container">
+            {sentiment.posPct > 0 && <div style={{ width: `${sentiment.posPct * 100}%` }} className="bg-sentiment-pos" />}
+            {sentiment.neuPct > 0 && <div style={{ width: `${sentiment.neuPct * 100}%` }} className="bg-sentiment-neu" />}
+            {sentiment.negPct > 0 && <div style={{ width: `${sentiment.negPct * 100}%` }} className="bg-sentiment-neg" />}
+          </div>
+          {redSpike && (
+            <div className="mt-2.5 text-[11px] text-sentiment-neg font-medium">
+              ● 負面突增 · {redSpike.date}（{redSpike.reasons.join('；')}）
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="bg-surface rounded-2xl border border-outline-variant card-shadow p-4 sm:p-5">
         <div className="flex items-center justify-between mb-1">

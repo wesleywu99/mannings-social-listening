@@ -14,6 +14,7 @@ interface QueryArgs {
 
 function rowToPost(r: Record<string, unknown>): Post {
   return {
+    id: r.id as number | undefined,
     brand: r.brand as string, platform: r.platform as Platform,
     postTime: r.post_time as string, username: r.username as string | null,
     content: r.content as string | null, postUrl: r.post_url as string | null,
@@ -22,6 +23,8 @@ function rowToPost(r: Record<string, unknown>): Post {
     engagementTotal: r.engagement_total as number | null,
     metrics: (r.metrics as Record<string, number>) ?? {},
     sources: (r.sources as PostSource[]) ?? [],
+    sentiment: (r.sentiment as Post['sentiment']) ?? null,
+    sentimentScore: (r.sentiment_score as number | null) ?? null,
   };
 }
 

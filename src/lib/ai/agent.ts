@@ -26,14 +26,15 @@ export async function runChat(
     ...userMessages,
   ];
   const toolsUsed: string[] = [];
+  let firstRoundSkippedTools = false;
 
   for (let i = 0; i < MAX_TOOL_ROUNDS; i++) {
     const res = await chatCompletion({
       model: getModelHeavy(),
       messages,
       tools: toolSchemas,
-      // 第一輪強制至少呼叫一次工具（避免模型偷懶只寒暄/給選單），之後自由
-      toolChoice: i === 0 ? 'required' : 'auto',
+      // SenseNova 不支援 'required'，全用 'auto'；靠 prompt + 補救邏輯保證首輪取數
+      toolChoice: 'auto',
       maxTokens: 2000,
     });
     if (res.tool_calls?.length) {
@@ -50,6 +51,16 @@ export async function runChat(
         toolsUsed.push(tc.function.name);
         messages.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify(result) });
       }
+      continue;
+    }
+    // 補救：第一輪未呼叫工具 → 注入 system 訊息強制取數後再試一輪
+    if (i === 0 && !firstRoundSkippedTools) {
+      firstRoundSkippedTools = true;
+      messages.push({ role: 'assistant', content: res.content ?? null });
+      messages.push({
+        role: 'system',
+        content: '你剛才未呼叫任何工具。記住規則：回答任何數據相關問題前必須先呼叫至少一個工具取得真實數字。請現在立即呼叫一個適當的工具。',
+      });
       continue;
     }
     return { answer: res.content ?? '（無回應）', toolsUsed };

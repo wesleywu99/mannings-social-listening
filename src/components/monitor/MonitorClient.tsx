@@ -44,6 +44,7 @@ export function MonitorClient() {
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [posts, setPosts] = useState<Post[]>([]);
+  const [allPosts, setAllPosts] = useState<Post[]>([]);
   const [kpis, setKpis] = useState<PlatformKpis[]>([]);
   const [trends, setTrends] = useState<Record<Platform, TrendPoint[]>>({} as Record<Platform, TrendPoint[]>);
   const [prevKpis, setPrevKpis] = useState<PlatformKpis[]>([]);
@@ -87,12 +88,14 @@ export function MonitorClient() {
       return p;
     };
     const postQs = range(new URLSearchParams({ brand, platform, limit: '500' }));
+    const allQs = range(new URLSearchParams({ brand, limit: '1000' }));
     const kpiQs = range(new URLSearchParams({ brand }));
     const pw = prevWindow(start, end);
     const prevQs = pw ? range(new URLSearchParams({ brand, start: pw.start, end: pw.end })) : null;
 
     const fetches: Promise<unknown>[] = [
       fetch(`/api/data/posts?${postQs}`).then((r) => r.json()),
+      fetch(`/api/data/posts?${allQs}`).then((r) => r.json()),
       fetch(`/api/data/kpis?${kpiQs}`).then((r) => r.json()),
     ];
     if (prevQs) fetches.push(fetch(`/api/data/kpis?${prevQs}`).then((r) => r.json()));
@@ -100,9 +103,11 @@ export function MonitorClient() {
     Promise.all(fetches)
       .then((res) => {
         const p = res[0];
-        const k = res[1];
-        const prev = res[2];
+        const ap = res[1];
+        const k = res[2];
+        const prev = res[3];
         setPosts(Array.isArray(p) ? (p as Post[]) : []);
+        setAllPosts(Array.isArray(ap) ? (ap as Post[]) : []);
         if (Array.isArray(k)) {
           setKpis(k as PlatformKpis[]);
           setTrends({} as Record<Platform, TrendPoint[]>);
@@ -138,10 +143,20 @@ export function MonitorClient() {
     setCloseSignal((n) => n + 1);
     setTimeout(() => document.getElementById('posts-table-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
+  const handleSentimentFilter = (sentiment: 'pos' | 'neu' | 'neg') => {
+    setSearch(`sentiment:${sentiment}`);
+    setSearchOpen(true);
+    setModuleOpen(false);
+    setCloseSignal((n) => n + 1);
+    setTimeout(() => document.getElementById('posts-table-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  };
   const q = search.trim().toLowerCase();
-  const shown = q
-    ? posts.filter((p) => (p.content ?? '').toLowerCase().includes(q) || (p.username ?? '').toLowerCase().includes(q))
-    : posts;
+  const sentimentFilter = q.startsWith('sentiment:') ? q.slice('sentiment:'.length) : null;
+  const shown = posts.filter((p) => {
+    if (sentimentFilter) return p.sentiment === sentimentFilter;
+    if (q) return (p.content ?? '').toLowerCase().includes(q) || (p.username ?? '').toLowerCase().includes(q);
+    return true;
+  });
 
   // chat / 解讀 共用範圍：以 brand + 日期為硬性篩選；platform 不鎖（讓 AI 跨平台分析）
   const scope: Scope = {
@@ -175,7 +190,7 @@ export function MonitorClient() {
         </div>
       </div>
 
-      <OverviewSummary kpis={kpis} prevKpis={prevKpis} trends={trends} scope={scope} closeSignal={closeSignal} />
+      <OverviewSummary kpis={kpis} prevKpis={prevKpis} trends={trends} scope={scope} closeSignal={closeSignal} allPosts={allPosts} scopeDates={{ start, end }} />
 
       <section className="space-y-8">
         <PlatformTabs value={platform} onChange={setPlatform} />
@@ -223,7 +238,7 @@ export function MonitorClient() {
               </button>
             </div>
           </div>
-          <PostsTable posts={shown} population={population} platform={platform} scope={scope} closeSignal={closeSignal} />
+          <PostsTable posts={shown} population={population} platform={platform} scope={scope} closeSignal={closeSignal} onSentimentFilter={handleSentimentFilter} />
         </div>
       </section>
 

@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "backfill": "tsx scripts/backfill.ts"
+    "backfill": "tsx scripts/backfill.ts",
+    "tag-sentiment": "tsx scripts/tag-sentiment.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

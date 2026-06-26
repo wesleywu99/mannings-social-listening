@@ -7,6 +7,7 @@ function post(platform: Post['platform'], eng: number): Post {
     brand: '我們的品牌', platform, postTime: '2024-03-01T00:00:00Z',
     username: '@x', content: '', postUrl: `u${Math.random()}`, mediaType: 'text',
     likes: 0, comments: 0, followerCount: null, engagementTotal: eng, metrics: {}, sources: [],
+    sentiment: null, sentimentScore: null,
   };
 }
 

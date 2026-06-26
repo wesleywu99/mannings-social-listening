@@ -6,6 +6,7 @@ function post(iso: string, eng: number): Post {
   return {
     brand: 'B', platform: 'ig', postTime: iso, username: '@x', content: '', postUrl: iso + eng,
     mediaType: 'Photo', likes: 0, comments: 0, followerCount: null, engagementTotal: eng, metrics: {}, sources: [],
+    sentiment: null, sentimentScore: null,
   };
 }
 

@@ -4,6 +4,7 @@ import type { Platform, Post } from '@/lib/domain/types';
 import type { Scope } from '@/lib/ai/types';
 import { Modal } from '@/components/Modal';
 import { AIText } from './aiText';
+import { computeSentimentSummary } from '@/lib/domain/aggregate';
 
 const META: Record<Platform, { label: string; dot: string }> = {
   ig: { label: 'Instagram', dot: 'bg-instagram' },
@@ -63,6 +64,9 @@ export function DayDetailModal({
       .map(([k, v]) => ({ type: k, pct: count ? Math.round((v / count) * 100) : 0 }));
     return { totalEng, count, epp, split, top, mix: mixTop };
   }, [posts]);
+
+  const sentiment = useMemo(() => computeSentimentSummary(posts), [posts]);
+  const hasSentiment = sentiment.total > 0;
 
   const xAvg = periodAvgEpp ? stats.epp / periodAvgEpp : 0;
   const weekday = (() => { const d = new Date(`${rangeStart}T00:00:00`); return Number.isNaN(d.getTime()) ? '' : WK[d.getDay()]; })();
@@ -139,6 +143,28 @@ export function DayDetailModal({
                           <span className="flex items-baseline gap-2.5"><span className="text-[13px] font-semibold tabular-nums">{s.eng.toLocaleString()}</span><span className="text-[11px] text-mute tabular-nums w-9 text-right">{s.share.toFixed(0)}%</span></span>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 當日情感 */}
+                {!loading && hasSentiment && (
+                  <div>
+                    <div className="font-mono text-[10px] font-semibold uppercase tracking-wide text-mute mb-2">Sentiment · 當日情感</div>
+                    <div className="border border-outline-variant rounded-xl px-3.5 py-3">
+                      <div className="flex h-1.5 rounded-full overflow-hidden bg-surface-container mb-2">
+                        {sentiment.posPct > 0 && <div style={{ width: `${sentiment.posPct * 100}%` }} className="bg-sentiment-pos" />}
+                        {sentiment.neuPct > 0 && <div style={{ width: `${sentiment.neuPct * 100}%` }} className="bg-sentiment-neu" />}
+                        {sentiment.negPct > 0 && <div style={{ width: `${sentiment.negPct * 100}%` }} className="bg-sentiment-neg" />}
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] tabular-nums text-on-surface-variant">
+                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sentiment-pos" />正 {sentiment.pos}</span>
+                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sentiment-neu" />中 {sentiment.neu}</span>
+                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sentiment-neg" />負 {sentiment.neg}</span>
+                      </div>
+                      {sentiment.negPct > 0.5 && (
+                        <div className="mt-2 text-[11px] text-sentiment-neg font-medium">● 負面占比過半（{Math.round(sentiment.negPct * 100)}%）</div>
+                      )}
                     </div>
                   </div>
                 )}

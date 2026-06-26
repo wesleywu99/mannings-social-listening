@@ -1,5 +1,7 @@
 export type Platform = 'threads' | 'ig' | 'fb';
 
+export type Sentiment = 'pos' | 'neu' | 'neg';
+
 /** 一則貼文被哪些監測維度抓到（keyword / hashtag / mention / account…）；可同時多個 */
 export interface PostSource {
   type: string;   // 'keyword' | 'hashtag' | 'mention' | 'account' | ...
@@ -7,6 +9,7 @@ export interface PostSource {
 }
 
 export interface Post {
+  id?: number;                       // Supabase bigint PK（標記 sentiment 時用）
   brand: string;
   platform: Platform;
   postTime: string;        // ISO 8601
@@ -20,6 +23,8 @@ export interface Post {
   engagementTotal: number | null;
   metrics: Record<string, number>;
   sources: PostSource[];
+  sentiment: Sentiment | null;      // pos / neu / neg（AI 標記，可為空）
+  sentimentScore: number | null;    // -1 ~ 1 置信度
 }
 
 export interface PlatformKpis {

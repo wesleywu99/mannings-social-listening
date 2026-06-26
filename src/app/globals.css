@@ -19,6 +19,7 @@
   --color-faint: #a1a1a1;              /* placeholder / disabled */
   --color-outline-variant: #ebebeb;    /* 1px 細灰邊線 hairline（中性） */
   --color-sentiment-pos: #10b981;
+  --color-sentiment-neu: #a1a1a1;
   --color-sentiment-neg: #ef4444;
   --color-facebook: #5577ba;
   --color-instagram: #8b5cf6;        /* violet：分類標籤色，刻意避開紅/粉以防與「警示/下滑」語意衝突 */

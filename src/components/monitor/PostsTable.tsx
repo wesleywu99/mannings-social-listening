@@ -14,19 +14,21 @@ export function PostsTable({
   platform,
   scope,
   closeSignal = 0,
+  onSentimentFilter,
 }: {
   posts: Post[];
   population: number[];
   platform: Platform;
   scope: Scope;
   closeSignal?: number;
+  onSentimentFilter?: (sentiment: 'pos' | 'neu' | 'neg') => void;
 }) {
   const [selected, setSelected] = useState<Post | null>(null);
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'Engagement', dir: 'desc' });
 
   const cols = metricColumns(platform);
   const showMedia = platform !== 'fb';   // FB 媒體型別恆為 'post'，無意義 → 隱藏
-  const emptyColSpan = 4 + cols.length + (showMedia ? 1 : 0) + 1;
+  const emptyColSpan = 5 + cols.length + (showMedia ? 1 : 0) + 1;
 
   // 切平台時重置排序（避免停在新平台不存在的欄）
   useEffect(() => {
@@ -76,6 +78,7 @@ export function PostsTable({
           <thead className="sticky top-0 z-10 bg-surface-container text-[10px] font-black text-on-surface-variant/60 uppercase tracking-widest">
             <tr>
               <th className="px-3 py-3.5 w-10 text-center">#</th>
+              <th className="px-3 py-3.5 text-center whitespace-nowrap">Sentiment</th>
               <th className="px-3 py-3.5 whitespace-nowrap text-left">
                 <button onClick={() => toggleSort(TIME_KEY)} className="hover:text-primary transition-colors uppercase">
                   {TIME_KEY}
@@ -109,6 +112,19 @@ export function PostsTable({
                       />
                       <span className="text-xs font-medium tabular-nums text-on-surface-variant/40">{i + 1}</span>
                     </div>
+                  </td>
+                  <td className="px-3 py-3.5 text-center">
+                    {p.sentiment ? (
+                      <button
+                        onClick={() => onSentimentFilter?.(p.sentiment!)}
+                        title={`篩選 ${p.sentiment === 'pos' ? '正面' : p.sentiment === 'neg' ? '負面' : '中性'}貼文`}
+                        className={`inline-block w-2.5 h-2.5 rounded-full transition-transform hover:scale-125 ${
+                          p.sentiment === 'pos' ? 'bg-sentiment-pos' : p.sentiment === 'neg' ? 'bg-sentiment-neg' : 'bg-sentiment-neu'
+                        }`}
+                      />
+                    ) : (
+                      <span className="inline-block w-2.5 h-2.5 rounded-full border border-outline-variant" title="未標記" />
+                    )}
                   </td>
                   <td className="px-3 py-3.5 text-xs text-on-surface-variant/60 whitespace-nowrap tabular-nums">
                     {fmtTime(p.postTime)}

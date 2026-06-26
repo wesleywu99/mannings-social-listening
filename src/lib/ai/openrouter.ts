@@ -1,7 +1,6 @@
-import 'server-only';
 import type { ChatMessage } from './types';
 
-const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
+const ENDPOINT = 'https://token.sensenova.cn/v1/chat/completions';
 
 export function getModelHeavy(): string {
   return process.env.AI_MODEL_HEAVY || 'deepseek/deepseek-chat';
@@ -24,7 +23,7 @@ export interface CompletionResult {
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
 }
 
-/** 呼叫 OpenRouter（OpenAI 相容），含簡易重試。回傳 assistant 訊息。 */
+/** 呼叫 AI provider（OpenAI 相容，現為 SenseNova），含簡易重試。回傳 assistant 訊息。 */
 export async function chatCompletion(opts: CompletionOpts): Promise<CompletionResult> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) throw new Error('Missing OPENROUTER_API_KEY');
@@ -37,7 +36,8 @@ export async function chatCompletion(opts: CompletionOpts): Promise<CompletionRe
   };
   if (opts.tools?.length) {
     body.tools = opts.tools;
-    body.tool_choice = opts.toolChoice ?? 'auto';
+    // SenseNova 不支援 tool_choice:'required'（回 502001），僅用 'auto'
+    body.tool_choice = opts.toolChoice === 'none' ? 'none' : 'auto';
   }
 
   let lastErr: unknown;
@@ -49,11 +49,11 @@ export async function chatCompletion(opts: CompletionOpts): Promise<CompletionRe
         body: JSON.stringify(body),
       });
       if (res.status === 429 || res.status >= 500) {
-        lastErr = new Error(`OpenRouter HTTP ${res.status}`);
+        lastErr = new Error(`AI provider HTTP ${res.status}`);
         await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
         continue;
       }
-      if (!res.ok) throw new Error(`OpenRouter HTTP ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(`AI provider HTTP ${res.status}: ${await res.text()}`);
       const json = await res.json();
       const msg = json.choices?.[0]?.message ?? {};
       return { content: msg.content ?? null, tool_calls: msg.tool_calls };
@@ -62,5 +62,5 @@ export async function chatCompletion(opts: CompletionOpts): Promise<CompletionRe
       await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error('OpenRouter request failed');
+  throw lastErr instanceof Error ? lastErr : new Error('AI provider request failed');
 }

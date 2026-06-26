@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { buildTools } from '@/lib/ai/tools';
 import { queryPosts } from '@/lib/data/posts';
-import { computeHeatmap } from '@/lib/domain/aggregate';
+import { computeHeatmap, computeSentimentSummary, computeSentimentTrend, detectSentimentSpikes } from '@/lib/domain/aggregate';
 import { DEFAULT_BRAND } from '@/lib/config';
 import type { Scope } from '@/lib/ai/types';
 
@@ -25,7 +25,11 @@ export async function GET(req: NextRequest) {
       queryPosts({ brand: scope.brand, dateStart: scope.dateStart, dateEnd: scope.dateEnd }),
     ]);
     const heatmap = computeHeatmap(allPosts);
-    return NextResponse.json({ byPlatform, byMedia, creators, igTier, heatmap });
+    const sentiment = {
+      summary: computeSentimentSummary(allPosts),
+      spikes: detectSentimentSpikes(computeSentimentTrend(allPosts, start ?? undefined, end ?? undefined)),
+    };
+    return NextResponse.json({ byPlatform, byMedia, creators, igTier, heatmap, sentiment });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

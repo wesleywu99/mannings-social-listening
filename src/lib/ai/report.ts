@@ -11,6 +11,7 @@ export interface ReportSections {
   platform: string;
   kol: string;
   igRate: string;
+  sentiment: string;
 }
 
 const FALLBACK = '此部分未能生成，請重新生成報告。';
@@ -18,13 +19,14 @@ const FALLBACK = '此部分未能生成，請重新生成報告。';
 /** 用工具組裝確定性數據摘要（SOP），不經 LLM */
 async function buildContext(scope: Scope): Promise<string> {
   const tools = Object.fromEntries(buildTools(scope).map((t) => [t.name, t]));
-  const [overall, platform, creators, dist, time, igTier] = await Promise.all([
+  const [overall, platform, creators, dist, time, igTier, sentiment] = await Promise.all([
     tools.aggregate_metrics.run({ group_by: 'overall' }),
     tools.aggregate_metrics.run({ group_by: 'platform' }),
     tools.top_creators.run({ limit: 10 }),
     tools.engagement_distribution.run({}),
     tools.time_patterns.run({}),
     tools.ig_tier_analysis.run({}),
+    tools.sentiment_breakdown.run({}),
   ]);
   return [
     `【整體】${JSON.stringify(overall)}`,
@@ -33,11 +35,12 @@ async function buildContext(scope: Scope): Promise<string> {
     `【互動分佈】${JSON.stringify(dist)}`,
     `【發文時段】${JSON.stringify(time)}`,
     `【IG 粉絲分層】${JSON.stringify(igTier)}`,
+    `【情感輿情】${JSON.stringify(sentiment)}`,
   ].join('\n\n');
 }
 
 function parseSections(text: string): ReportSections {
-  const keys: (keyof ReportSections)[] = ['summary', 'advice', 'content', 'platform', 'kol', 'igRate'];
+  const keys: (keyof ReportSections)[] = ['summary', 'advice', 'content', 'platform', 'kol', 'igRate', 'sentiment'];
   const out = {} as ReportSections;
   for (const k of keys) {
     const re = new RegExp(`={2,}\\s*SECTION\\s*:\\s*${k}\\s*={2,}([\\s\\S]*?)(?:={2,}\\s*SECTION|$)`, 'i');
@@ -56,7 +59,7 @@ export async function runReport(scope: Scope): Promise<ReportSections> {
       { role: 'system', content: REPORT_SYSTEM_PROMPT },
       { role: 'user', content: ctx },
     ],
-    maxTokens: 3000,
+    maxTokens: 3600,
   });
   return parseSections(res.content ?? '');
 }

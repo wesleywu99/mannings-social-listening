@@ -1,6 +1,7 @@
 import 'server-only';
 import { queryPosts } from '@/lib/data/posts';
 import { median } from '@/lib/domain/engagement';
+import { computeSentimentSummary, computeSentimentTrend, detectSentimentSpikes } from '@/lib/domain/aggregate';
 import type { Platform, Post } from '@/lib/domain/types';
 import type { Scope, ToolDef } from './types';
 import { percentile, mean, topShare, groupBy, round } from './stats';
@@ -170,6 +171,32 @@ export function buildTools(scope: Scope): ToolDef[] {
           breakoutPosts: breakout.length,
           breakoutExamples: breakout.slice(0, 5).map((p) => ({ username: p.username, engagement: p.engagementTotal, followers: p.followerCount })),
         };
+      },
+    },
+    {
+      name: 'sentiment_breakdown',
+      description: '情感輿情分析：正/負/中占比、負面突增信號、Top 負面貼文。回答「負面聲量」「情緒占比」「為什麼負面上升」時用。',
+      parameters: {
+        type: 'object',
+        properties: { ...scopeParams, top_n: { type: 'number', description: '回傳 Top N 負面貼文，預設 5' } },
+      },
+      run: async (args) => {
+        const posts = await fetchScoped(scope, args);
+        const summary = computeSentimentSummary(posts);
+        const trend = computeSentimentTrend(posts, (args.date_start as string) ?? scope.dateStart, (args.date_end as string) ?? scope.dateEnd);
+        const spikes = detectSentimentSpikes(trend);
+        const topNeg = posts
+          .filter((p) => p.sentiment === 'neg')
+          .sort((a, b) => (b.sentimentScore ?? 0) - (a.sentimentScore ?? 0))
+          .slice(0, (args.top_n as number) ?? 5)
+          .map((p) => ({
+            platform: p.platform,
+            username: p.username,
+            content: (p.content ?? '').slice(0, 150),
+            engagement: p.engagementTotal,
+            score: p.sentimentScore,
+          }));
+        return { summary, spikes, topNegativePosts: topNeg };
       },
     },
   ];

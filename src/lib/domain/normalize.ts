@@ -51,5 +51,7 @@ export function normalizeRow(
     engagementTotal: num(raw['Engagement_Total']),
     metrics,
     sources: [],   // xlsx 回填無來源資訊；未來 n8n 多維度收集時填入
+    sentiment: null,
+    sentimentScore: null,
   };
 }

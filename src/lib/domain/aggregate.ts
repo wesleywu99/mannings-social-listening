@@ -164,3 +164,154 @@ export function computeTrends(
   }
   return result;
 }
+
+// ─── 情感輿情 ─────────────────────────────────────────────────────────
+
+export interface SentimentSummary {
+  total: number;
+  pos: number; neu: number; neg: number;
+  posPct: number; neuPct: number; negPct: number;  // 0-1
+  avgScore: number;  // -1 ~ 1
+}
+
+const pct = (n: number, total: number) => (total ? n / total : 0);
+
+export function computeSentimentSummary(posts: Post[]): SentimentSummary {
+  let pos = 0, neu = 0, neg = 0;
+  let scoreSum = 0, scoreCount = 0;
+  for (const p of posts) {
+    if (p.sentiment === 'pos') pos++;
+    else if (p.sentiment === 'neg') neg++;
+    else if (p.sentiment === 'neu') neu++;
+    if (p.sentimentScore != null) { scoreSum += p.sentimentScore; scoreCount++; }
+  }
+  const total = pos + neu + neg;
+  return {
+    total,
+    pos, neu, neg,
+    posPct: pct(pos, total), neuPct: pct(neu, total), negPct: pct(neg, total),
+    avgScore: scoreCount ? Math.round((scoreSum / scoreCount) * 1000) / 1000 : 0,
+  };
+}
+
+export interface SentimentTrendPoint {
+  date: string;       // YYYY-MM-DD
+  pos: number; neu: number; neg: number;
+  total: number;
+  negPct: number;     // 0-1
+}
+
+/** 逐日 sentiment 分布序列；空桶補 0；跨度邏輯同 computeTrends（>60 天切週桶） */
+export function computeSentimentTrend(
+  posts: Post[],
+  dateStart?: string,
+  dateEnd?: string,
+): SentimentTrendPoint[] {
+  let lo: Date | null = dateStart ? parseDate(dateStart) : null;
+  let hi: Date | null = dateEnd ? parseDate(dateEnd) : null;
+  if (!lo || !hi) {
+    for (const post of posts) {
+      const d = parseDate(post.postTime);
+      if (!d) continue;
+      if (!lo || d < lo) lo = d;
+      if (!hi || d > hi) hi = d;
+    }
+  }
+  if (!lo || !hi) return [];
+
+  const spanDays = Math.round((hi.getTime() - lo.getTime()) / DAY_MS) + 1;
+  const weekly = spanDays > 60;
+  const step = weekly ? 7 : 1;
+  const start = weekly ? mondayOf(lo) : lo;
+  const end = hi;
+
+  const keys: string[] = [];
+  const cur = new Date(start.getTime());
+  while (cur.getTime() <= end.getTime()) {
+    keys.push(ymd(cur));
+    cur.setUTCDate(cur.getUTCDate() + step);
+  }
+  if (!keys.length || keys[keys.length - 1] !== ymd(end)) keys.push(ymd(end));
+
+  const buckets = new Map<string, { pos: number; neu: number; neg: number }>();
+  for (const k of keys) buckets.set(k, { pos: 0, neu: 0, neg: 0 });
+  for (const post of posts) {
+    const d = parseDate(post.postTime);
+    if (!d) continue;
+    const key = ymd(weekly ? mondayOf(d) : d);
+    const b = buckets.get(key);
+    if (!b) continue;
+    if (post.sentiment === 'pos') b.pos++;
+    else if (post.sentiment === 'neg') b.neg++;
+    else if (post.sentiment === 'neu') b.neu++;
+  }
+
+  return keys.map((k) => {
+    const b = buckets.get(k)!;
+    const total = b.pos + b.neu + b.neg;
+    return { date: k, pos: b.pos, neu: b.neu, neg: b.neg, total, negPct: pct(b.neg, total) };
+  });
+}
+
+export interface SentimentSpike {
+  date: string;
+  level: 'red' | 'orange' | 'yellow';
+  reasons: string[];
+}
+
+function percentile(values: number[], p: number): number {
+  if (values.length === 0) return 0;
+  const s = [...values].sort((a, b) => a - b);
+  const idx = (p / 100) * (s.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return s[lo];
+  return s[lo] + (s[hi] - s[lo]) * (idx - lo);
+}
+
+/**
+ * 負面突增複合信號（三層，取最嚴重 red > orange > yellow）：
+ * - red:    neg% > 50%（絕對危險，無條件）
+ * - orange: 當日負面帖數 > 近 30 日負面帖數 P90（量級異常）
+ * - yellow: 當日 neg% > 近 7 日 neg% 均值 × 1.5 且當日負面包數 ≥ 5（趨勢突增）
+ */
+export function detectSentimentSpikes(trend: SentimentTrendPoint[]): SentimentSpike[] {
+  const spikes: SentimentSpike[] = [];
+  const negCounts = trend.map((t) => t.neg);
+
+  for (let i = 0; i < trend.length; i++) {
+    const t = trend[i];
+    if (t.total === 0) continue;
+    const reasons: string[] = [];
+    let level: SentimentSpike['level'] | null = null;
+
+    // red: neg% > 50%
+    if (t.negPct > 0.5) {
+      level = 'red';
+      reasons.push(`負面占比 ${(t.negPct * 100).toFixed(0)}% 過半`);
+    }
+
+    // orange: 當日負面包數 > 近 30 日 P90（量級異常）
+    const lookback30 = negCounts.slice(Math.max(0, i - 30), i);
+    if (lookback30.length >= 7) {
+      const p90 = percentile(lookback30, 90);
+      if (t.neg > p90 && t.neg >= 3) {
+        if (level !== 'red') level = 'orange';
+        reasons.push(`負面帖數 ${t.neg} 超過近 30 日 P90 (${p90.toFixed(1)})`);
+      }
+    }
+
+    // yellow: 當日 neg% > 近 7 日均值 × 1.5 且負面包數 ≥ 5
+    const lookback7 = trend.slice(Math.max(0, i - 7), i).filter((x) => x.total > 0);
+    if (lookback7.length >= 3 && t.neg >= 5) {
+      const avgNegPct = lookback7.reduce((s, x) => s + x.negPct, 0) / lookback7.length;
+      if (avgNegPct > 0 && t.negPct > avgNegPct * 1.5) {
+        if (level === null) level = 'yellow';
+        reasons.push(`負面占比 ${(t.negPct * 100).toFixed(0)}% 高於近 7 日均值 ${(avgNegPct * 100).toFixed(0)}% 的 1.5 倍`);
+      }
+    }
+
+    if (level) spikes.push({ date: t.date, level, reasons });
+  }
+  return spikes;
+}

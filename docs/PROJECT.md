@@ -141,9 +141,9 @@ npm test                   # 單元 + 整合測試
 |---|---|---|---|
 | P0 | 時區（部署） | Vercel 設 `TZ=Asia/Hong_Kong`（不需改碼） | 🔜 部署時 |
 | P0 | 數據清潔 | normalize trim 前後空白/換行；username 已清 | ✅ |
-| P0 | 雜訊日期 | xlsx 有 6-9 筆 Excel 序列號跑掉的 2025/2026-03 列；預設視窗已避開；可選擇隔離/修正 | ⬜ |
-| P1 | 數據串聯 | AI 文字 @帳號 / 創作者清單 / 媒體 / 熱力圖格 → 點擊回填搜尋/篩選對應貼文（原 Index.html 有 @mention 跳表格） | ⬜ |
-| P1 | 情感分析 | **輿情核心缺口**：貼文/留言 正/負/中 標記 → 佔比 + 負面突增訊號 + AI 成因；建議 n8n 入庫時批次標記（省即時 token），加 `sentiment` 欄 | ⬜ |
+| P0 | 雜訊日期 | 2026-06-26 經 DB 直查確認無雜訊日期（earliest 2025-04-30，latest 2026-05-02）；預設 30 天視窗已避開稀疏期 | ✅ |
+| P1 | 情感分析 | posts 加 `sentiment`+`sentiment_score` 欄；AI 批次標記；UI 占比條+負面突增複合信號（red/orange/yellow）+AI 成因；Insight 第 8 段 | ✅ |
+| P1 | 數據串聯 | @mention 已做；創作者/媒體/熱力圖格點擊回填仍未做 | ⬜ |
 | P2 | 內容主題聚類 | 原 Index.html 第 ⑧ 模塊「內容主題洞察」：貼文按主題分群 | ⬜ |
 | P2 | Chat 升級 | 串流逐字輸出 + 後續問題 chip（`===FOLLOWUPS===`）+ @mention 可點 | ⬜ |
 | P2 | 全頁 loading 骨架 | 總覽/趨勢資料到位前的骨架 | ⬜ |
@@ -154,7 +154,8 @@ npm test                   # 單元 + 整合測試
 
 ## 10. 已知問題 / 注意
 
-- **OpenRouter 額度偏低**（free tier，曾回 402）：複雜多輪查詢可能中斷；持續用需儲值；maxTokens 已壓低。
+- **AI provider**：已從 OpenRouter 切至 **SenseNova**（`deepseek-v4-flash`，OpenAI 相容）。env var 名保留 `OPENROUTER_API_KEY` 歷史相容。`tool_choice:'required'` 不支持（回 502001），agent.ts 已改全用 `'auto'` + 首輪未取數補救邏輯。
+- **OpenRouter 額度偏低**（free tier，曾回 402）：已切 SenseNova 規避；maxTokens 已壓低。
 - **雜訊日期**：見上表 P0；預設 30 天視窗已避開，手動選 >60 天會切週桶。
 - **整合測試**需 `.env.local`（有 Supabase 憑證才跑，否則 skip）。
 - **Next 16 / Tailwind v4** 與舊版差異：`proxy.ts`（非 middleware）、`@theme`（非 config）。
