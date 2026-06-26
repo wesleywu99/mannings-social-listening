@@ -152,18 +152,30 @@ export function DayDetailModal({
                   <div>
                     <div className="font-mono text-[10px] font-semibold uppercase tracking-wide text-mute mb-2">Sentiment · 當日情感</div>
                     <div className="border border-outline-variant rounded-xl px-3.5 py-3">
-                      <div className="flex h-1.5 rounded-full overflow-hidden bg-surface-container mb-2">
-                        {sentiment.posPct > 0 && <div style={{ width: `${sentiment.posPct * 100}%` }} className="bg-sentiment-pos" />}
-                        {sentiment.neuPct > 0 && <div style={{ width: `${sentiment.neuPct * 100}%` }} className="bg-sentiment-neu" />}
-                        {sentiment.negPct > 0 && <div style={{ width: `${sentiment.negPct * 100}%` }} className="bg-sentiment-neg" />}
+                      <div className="flex h-1.5 rounded-full overflow-hidden bg-surface-container mb-2.5">
+                        {sentiment.posPct > 0 && <div style={{ width: `${sentiment.posPct * 100}%` }} className="bg-[#0f766e]" />}
+                        {sentiment.neuPct > 0 && <div style={{ width: `${sentiment.neuPct * 100}%` }} className="bg-[#d4d4d4]" />}
+                        {sentiment.negPct > 0 && <div style={{ width: `${sentiment.negPct * 100}%` }} className="bg-[#ee0000]" />}
                       </div>
-                      <div className="flex items-center gap-3 text-[11px] tabular-nums text-on-surface-variant">
-                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sentiment-pos" />正 {sentiment.pos}</span>
-                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sentiment-neu" />中 {sentiment.neu}</span>
-                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sentiment-neg" />負 {sentiment.neg}</span>
+                      <div className="grid grid-cols-3 gap-2 text-[11px] tabular-nums">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="flex items-center gap-1 text-on-surface-variant/60"><span className="w-1.5 h-1.5 rounded-full bg-[#0f766e]" />正面</span>
+                          <span className="text-on-surface font-semibold">{Math.round(sentiment.posPct * 100)}%</span>
+                          <span className="text-[10px] text-mute">{sentiment.pos}</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="flex items-center gap-1 text-on-surface-variant/60"><span className="w-1.5 h-1.5 rounded-full bg-[#d4d4d4]" />中性</span>
+                          <span className="text-on-surface font-semibold">{Math.round(sentiment.neuPct * 100)}%</span>
+                          <span className="text-[10px] text-mute">{sentiment.neu}</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="flex items-center gap-1 text-on-surface-variant/60"><span className="w-1.5 h-1.5 rounded-full bg-[#ee0000]" />負面</span>
+                          <span className="text-on-surface font-semibold">{Math.round(sentiment.negPct * 100)}%</span>
+                          <span className="text-[10px] text-mute">{sentiment.neg}</span>
+                        </div>
                       </div>
                       {sentiment.negPct > 0.5 && (
-                        <div className="mt-2 text-[11px] text-sentiment-neg font-medium">● 負面占比過半（{Math.round(sentiment.negPct * 100)}%）</div>
+                        <div className="mt-2.5 text-[11px] text-[#ee0000] font-medium">● 負面占比過半（{Math.round(sentiment.negPct * 100)}%）</div>
                       )}
                     </div>
                   </div>

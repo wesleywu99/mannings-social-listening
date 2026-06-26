@@ -12,6 +12,7 @@ import { DateRangePicker } from './DateRangePicker';
 import { DateRangePresets } from './DateRangePresets';
 import { ChatWidget } from './ChatWidget';
 import { MentionContext } from './mentionContext';
+import { useInsightCache } from './useInsightCache';
 import { DEFAULT_BRAND } from '@/lib/config';
 import type { Scope } from '@/lib/ai/types';
 
@@ -38,6 +39,7 @@ function prevWindow(start: string, end: string): { start: string; end: string } 
 }
 
 export function MonitorClient() {
+  const insightCache = useInsightCache();
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [brand, setBrand] = useState(DEFAULT_BRAND);
   const [platform, setPlatform] = useState<Platform>('ig');
@@ -143,13 +145,6 @@ export function MonitorClient() {
     setCloseSignal((n) => n + 1);
     setTimeout(() => document.getElementById('posts-table-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
-  const handleSentimentFilter = (sentiment: 'pos' | 'neu' | 'neg') => {
-    setSearch(`sentiment:${sentiment}`);
-    setSearchOpen(true);
-    setModuleOpen(false);
-    setCloseSignal((n) => n + 1);
-    setTimeout(() => document.getElementById('posts-table-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
-  };
   const q = search.trim().toLowerCase();
   const sentimentFilter = q.startsWith('sentiment:') ? q.slice('sentiment:'.length) : null;
   const shown = posts.filter((p) => {
@@ -238,11 +233,11 @@ export function MonitorClient() {
               </button>
             </div>
           </div>
-          <PostsTable posts={shown} population={population} platform={platform} scope={scope} closeSignal={closeSignal} onSentimentFilter={handleSentimentFilter} />
+          <PostsTable posts={shown} population={population} platform={platform} scope={scope} closeSignal={closeSignal} insightCache={insightCache} />
         </div>
       </section>
 
-      {moduleOpen && <ModuleInsightModal platform={platform} scope={scope} onClose={() => setModuleOpen(false)} />}
+      {moduleOpen && <ModuleInsightModal platform={platform} scope={scope} onClose={() => setModuleOpen(false)} insightCache={insightCache} />}
 
       <ChatWidget scope={scope} />
     </div>

@@ -5,27 +5,44 @@ import type { Scope } from '@/lib/ai/types';
 import { Modal } from '@/components/Modal';
 import { metricColumns, fmtTime } from './columns';
 import { AIText } from './aiText';
+import type { useInsightCache } from './useInsightCache';
+
+type InsightCache = ReturnType<typeof useInsightCache>;
 
 export function PostDetailModal({
   post,
   platform,
   scope,
   onClose,
+  insightCache,
 }: {
   post: Post | null;
   platform: Platform;
   scope: Scope;
   onClose: () => void;
+  insightCache: InsightCache;
 }) {
   const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { setInsight(null); setLoading(false); }, [post]);
+  // 開啟時：若有快取直接用，否則才調 AI
+  useEffect(() => {
+    if (!post) return;
+    const key = `post:${post.id ?? post.postUrl}`;
+    const cached = insightCache.get(key);
+    if (cached) { setInsight(cached); setLoading(false); }
+    else { setInsight(null); setLoading(false); }
+  }, [post, insightCache]);
 
   if (!post) return null;
   const cols = metricColumns(platform);
 
-  const runInsight = async () => {
+  const runInsight = async (force = false) => {
+    const key = `post:${post.id ?? post.postUrl}`;
+    if (!force) {
+      const cached = insightCache.get(key);
+      if (cached) { setInsight(cached); return; }
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/insight', {
@@ -34,7 +51,9 @@ export function PostDetailModal({
         body: JSON.stringify({ post, scope }),
       });
       const data = await res.json();
-      setInsight(data.insight ?? data.error ?? '（無法產生解讀）');
+      const text = data.insight ?? data.error ?? '（無法產生解讀）';
+      setInsight(text);
+      insightCache.set(key, text);
     } catch (e) {
       setInsight('發生錯誤：' + String(e));
     } finally {
@@ -87,7 +106,7 @@ export function PostDetailModal({
           {/* footer：黑色 AI 按鈕 + 關閉（右下角） */}
           <div className="sticky bottom-0 px-7 py-4 flex justify-end gap-2.5 border-t border-outline-variant/60 bg-surface">
             <button
-              onClick={runInsight}
+              onClick={() => runInsight(insight !== null)}
               disabled={loading}
               className="px-4 py-2 rounded-[10px] bg-primary text-on-primary text-[13px] font-semibold hover:bg-ai-hover transition-colors disabled:opacity-50"
             >

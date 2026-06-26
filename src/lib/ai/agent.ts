@@ -149,6 +149,7 @@ export async function runInsight(post: Post, scope: Scope): Promise<string> {
     `讚=${post.likes}　留言=${post.comments}`,
     post.followerCount != null ? `粉絲數=${post.followerCount}` : '',
     `其他互動=${JSON.stringify(post.metrics)}`,
+    post.sentiment ? `情感標記=${post.sentiment === 'pos' ? '正面' : post.sentiment === 'neg' ? '負面' : '中性'}（置信度=${post.sentimentScore ?? 'N/A'}）` : '',
     `內容=${(post.content ?? '').slice(0, 500)}`,
     '',
     '【該平台基準】',

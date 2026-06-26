@@ -56,6 +56,69 @@ function TrendChart({
   );
 }
 
+/** 情感圓環（donut）：三段弧 + 中心顯示情緒指數（-100~100） */
+function SentimentDonut({
+  pos, neu, neg, avgScore,
+}: {
+  pos: number; neu: number; neg: number; avgScore: number;
+}) {
+  const total = pos + neu + neg;
+  const R = 38, r = 26;  // 外半徑 / 內半徑
+  const C = 2 * Math.PI * R;
+  const cx = 50, cy = 50;
+
+  // 配色：pos 沉穩墨綠、neu hairline 灰、neg Vercel error
+  const COLORS = { pos: '#0f766e', neu: '#d4d4d4', neg: '#ee0000' };
+
+  if (total === 0) {
+    return (
+      <svg viewBox="0 0 100 100" className="w-36 h-36 shrink-0" role="img" aria-label="無情感資料">
+        <circle cx={cx} cy={cy} r={R} fill="none" stroke="#ebebeb" strokeWidth={R - r} />
+      </svg>
+    );
+  }
+
+  const segs = [
+    { v: pos, color: COLORS.pos },
+    { v: neu, color: COLORS.neu },
+    { v: neg, color: COLORS.neg },
+  ].filter((s) => s.v > 0);
+
+  let offset = 0;
+  const arcs = segs.map((s, i) => {
+    const frac = s.v / total;
+    const dash = frac * C;
+    const arc = (
+      <circle
+        key={i}
+        cx={cx} cy={cy} r={R} fill="none"
+        stroke={s.color}
+        strokeWidth={R - r}
+        strokeDasharray={`${dash} ${C - dash}`}
+        strokeDashoffset={-offset}
+        transform={`rotate(-90 ${cx} ${cy})`}
+        strokeLinecap="butt"
+      />
+    );
+    offset += dash;
+    return arc;
+  });
+
+  const score = Math.round(avgScore * 100);
+
+  return (
+    <svg viewBox="0 0 100 100" className="w-36 h-36 shrink-0" role="img" aria-label="情感占比">
+      {arcs}
+      <text x={cx} y={cy - 2} textAnchor="middle" fontSize={20} fontWeight={600} fill="#171717" fontFamily="var(--font-sans)" letterSpacing={-0.5} dominantBaseline="middle">
+        {score > 0 ? `+${score}` : score}
+      </text>
+      <text x={cx} y={cy + 13} textAnchor="middle" fontSize={6} fill="#a1a1a1" fontFamily="var(--font-mono)" letterSpacing={0.8}>
+        SCORE
+      </text>
+    </svg>
+  );
+}
+
 export function OverviewSummary({
   kpis, prevKpis, trends, scope, closeSignal = 0, allPosts = [], scopeDates,
 }: {
@@ -124,42 +187,78 @@ export function OverviewSummary({
       </div>
 
       {hasSentiment && (
-        <div className="bg-surface p-4 sm:p-5 rounded-2xl border border-outline-variant card-shadow">
-          <div className="flex items-center justify-between mb-2.5 flex-wrap gap-2">
-            <span className="font-mono text-[11px] font-medium uppercase tracking-normal text-on-surface-variant/60">Sentiment · 輿情健康度</span>
-            <div className="flex items-center gap-3 text-[11px] tabular-nums text-on-surface-variant">
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sentiment-pos" />正 {sentiment.pos} ({Math.round(sentiment.posPct * 100)}%)</span>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sentiment-neu" />中 {sentiment.neu} ({Math.round(sentiment.neuPct * 100)}%)</span>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sentiment-neg" />負 {sentiment.neg} ({Math.round(sentiment.negPct * 100)}%)</span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* 趨勢圖 2/3 */}
+          <div className="lg:col-span-2 bg-surface rounded-2xl border border-outline-variant card-shadow p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-semibold text-on-surface">Engagement &amp; posts over time</span>
+              <span className="flex items-center gap-4 text-[11px] text-on-surface-variant/70">
+                <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 border-t-2 border-on-surface" />Engagement</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#e2e2e2]" />Posts</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-full ring-1 ring-sentiment-neg" />Breakout</span>
+              </span>
+            </div>
+            <TrendChart days={days} eng={engSeries} posts={postSeries} flags={flags} onSelect={setSel} />
+            <div className="text-xs text-on-surface-variant/60 mt-1">
+              {breakCount > 0 ? <>偵測到 <b className="text-on-surface">{breakCount}</b> 個破圈日 · 點任一日看明細與 AI 解讀</> : '點任一日看明細與 AI 解讀'}
             </div>
           </div>
-          <div className="flex h-2 rounded-full overflow-hidden bg-surface-container">
-            {sentiment.posPct > 0 && <div style={{ width: `${sentiment.posPct * 100}%` }} className="bg-sentiment-pos" />}
-            {sentiment.neuPct > 0 && <div style={{ width: `${sentiment.neuPct * 100}%` }} className="bg-sentiment-neu" />}
-            {sentiment.negPct > 0 && <div style={{ width: `${sentiment.negPct * 100}%` }} className="bg-sentiment-neg" />}
-          </div>
-          {redSpike && (
-            <div className="mt-2.5 text-[11px] text-sentiment-neg font-medium">
-              ● 負面突增 · {redSpike.date}（{redSpike.reasons.join('；')}）
+
+          {/* 情感餅圖 1/3 */}
+          <div className="bg-surface rounded-2xl border border-outline-variant card-shadow p-4 sm:p-5 flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-mono text-[11px] font-medium uppercase tracking-normal text-on-surface-variant/60">Sentiment · 輿情健康度</span>
             </div>
-          )}
+            <div className="flex flex-col items-center justify-center flex-1 gap-3 py-2">
+              <SentimentDonut
+                pos={sentiment.pos}
+                neu={sentiment.neu}
+                neg={sentiment.neg}
+                avgScore={sentiment.avgScore}
+              />
+              <div className="grid grid-cols-3 gap-2 w-full text-[11px] tabular-nums">
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="flex items-center gap-1 text-on-surface-variant/60"><span className="w-1.5 h-1.5 rounded-full bg-[#0f766e]" />正面</span>
+                  <span className="text-on-surface font-semibold">{Math.round(sentiment.posPct * 100)}%</span>
+                  <span className="text-[10px] text-mute">{sentiment.pos}</span>
+                </div>
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="flex items-center gap-1 text-on-surface-variant/60"><span className="w-1.5 h-1.5 rounded-full bg-[#d4d4d4]" />中性</span>
+                  <span className="text-on-surface font-semibold">{Math.round(sentiment.neuPct * 100)}%</span>
+                  <span className="text-[10px] text-mute">{sentiment.neu}</span>
+                </div>
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="flex items-center gap-1 text-on-surface-variant/60"><span className="w-1.5 h-1.5 rounded-full bg-[#ee0000]" />負面</span>
+                  <span className="text-on-surface font-semibold">{Math.round(sentiment.negPct * 100)}%</span>
+                  <span className="text-[10px] text-mute">{sentiment.neg}</span>
+                </div>
+              </div>
+            </div>
+            {redSpike && (
+              <div className="mt-2 text-[11px] text-sentiment-neg font-medium">
+                ● 負面突增 · {redSpike.date}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      <div className="bg-surface rounded-2xl border border-outline-variant card-shadow p-4 sm:p-5">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-sm font-semibold text-on-surface">Engagement &amp; posts over time</span>
-          <span className="flex items-center gap-4 text-[11px] text-on-surface-variant/70">
-            <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 border-t-2 border-on-surface" />Engagement</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#e2e2e2]" />Posts</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-full ring-1 ring-sentiment-neg" />Breakout</span>
-          </span>
+      {!hasSentiment && (
+        <div className="bg-surface rounded-2xl border border-outline-variant card-shadow p-4 sm:p-5">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm font-semibold text-on-surface">Engagement &amp; posts over time</span>
+            <span className="flex items-center gap-4 text-[11px] text-on-surface-variant/70">
+              <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 border-t-2 border-on-surface" />Engagement</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#e2e2e2]" />Posts</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-full ring-1 ring-sentiment-neg" />Breakout</span>
+            </span>
+          </div>
+          <TrendChart days={days} eng={engSeries} posts={postSeries} flags={flags} onSelect={setSel} />
+          <div className="text-xs text-on-surface-variant/60 mt-1">
+            {breakCount > 0 ? <>偵測到 <b className="text-on-surface">{breakCount}</b> 個破圈日 · 點任一日看明細與 AI 解讀</> : '點任一日看明細與 AI 解讀'}
+          </div>
         </div>
-        <TrendChart days={days} eng={engSeries} posts={postSeries} flags={flags} onSelect={setSel} />
-        <div className="text-xs text-on-surface-variant/60 mt-1">
-          {breakCount > 0 ? <>偵測到 <b className="text-on-surface">{breakCount}</b> 個破圈日 · 點任一日看明細與 AI 解讀</> : '點任一日看明細與 AI 解讀'}
-        </div>
-      </div>
+      )}
 
       <div className="bg-surface rounded-2xl border border-outline-variant card-shadow overflow-x-auto">
         <table className="w-full text-right">
