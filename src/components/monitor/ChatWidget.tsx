@@ -53,7 +53,7 @@ export function ChatWidget({ scope }: { scope: Scope }) {
         <div className="fixed bottom-8 right-8 z-[60] w-[400px] max-w-[calc(100vw-2rem)] h-[560px] max-h-[calc(100vh-4rem)] bg-surface rounded-3xl shadow-2xl border border-outline-variant/30 flex flex-col overflow-hidden">
           <div className="px-5 py-4 bg-ai-highlight text-on-primary flex items-center justify-between">
             <div className="flex items-center gap-2"><span className="font-black text-sm">AI 智能分析師</span></div>
-            <button onClick={() => setOpen(false)} className="text-on-primary/80 hover:text-on-primary text-lg leading-none">✕</button>
+            <button onClick={() => setOpen(false)} className="text-on-primary/80 hover:text-on-primary text-xl leading-none">×</button>
           </div>
           <div className="px-5 py-2 text-[11px] text-on-surface-variant/60 border-b border-outline-variant/10">
             範圍：{scope.brand}{scope.platform ? ` · ${scope.platform}` : ''}{(scope.dateStart || scope.dateEnd) ? ' · 已篩日期' : ''}
