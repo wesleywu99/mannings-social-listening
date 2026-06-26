@@ -61,7 +61,7 @@ export async function runChat(
 
 /** AI 解讀：針對單一貼文的一次性解讀（與當前平台基準比較） */
 export async function runInsight(post: Post, scope: Scope): Promise<string> {
-  const kpis = await getKpis({ brand: scope.brand, dateStart: scope.dateStart, dateEnd: scope.dateEnd });
+  const { kpis } = await getKpis({ brand: scope.brand, dateStart: scope.dateStart, dateEnd: scope.dateEnd });
   const k = kpis.find((x) => x.platform === post.platform);
   const ctx = [
     '【貼文資料】',

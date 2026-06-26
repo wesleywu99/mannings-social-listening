@@ -1,25 +1,35 @@
 @import "tailwindcss";
 
-/* 來自 new/數據監測工作台.html 的設計 token（Tailwind v4 用 @theme 定義） */
-/* 極簡 SaaS 風格（參考 DESIGN-vercel.md）：近白畫布、近黑墨色、細灰邊線、灰階文字階梯 */
+/* 設計 token（Tailwind v4 用 @theme 定義） */
+/* Vercel Geist 極簡系統（對齊 DESIGN-vercel.md）：墨黑 on 近白、中性灰階、細灰邊線 */
 @theme {
-  --color-primary: #2563eb;          /* 強調藍，僅用於連結/作用中狀態，少量使用 */
+  --color-primary: #171717;            /* 墨黑 ink：標題、CTA、作用中態 */
   --color-on-primary: #ffffff;
-  --color-ai-highlight: #2563eb;
-  --color-ai-hover: #1d4ed8;
-  --color-background: #fafafa;
-  --color-surface: #ffffff;
-  --color-surface-container: #f1f5f9;
-  --color-on-surface: #0f172a;       /* 近黑墨色：大數字、標題 */
-  --color-on-surface-variant: #475569; /* 次要文字 */
-  --color-outline-variant: #e2e8f0;  /* 細灰邊線 hairline */
+  --color-link: #0070f3;               /* 連結 / focus 專用，少量使用 */
+  --color-link-soft: #d3e5ff;          /* focus 淺底 */
+  --color-ai-highlight: #171717;       /* AI CTA 同墨黑，保持一致 */
+  --color-ai-hover: #000000;           /* press 純黑 */
+  --color-background: #fafafa;         /* 近白畫布 canvas */
+  --color-surface: #ffffff;            /* 卡片 / 輸入 / 表頭 elevated */
+  --color-surface-container: #f2f2f2;  /* 中性淺灰 inset */
+  --color-hairline-soft: #f2f2f2;      /* 最淺分隔 */
+  --color-on-surface: #171717;         /* 墨黑：大數字、標題 */
+  --color-on-surface-variant: #4d4d4d; /* body 次要文字（中性，非 slate） */
+  --color-mute: #8f8f8f;               /* 四階文字梯：caption / metadata */
+  --color-faint: #a1a1a1;              /* placeholder / disabled */
+  --color-outline-variant: #ebebeb;    /* 1px 細灰邊線 hairline（中性） */
   --color-sentiment-pos: #10b981;
   --color-sentiment-neg: #ef4444;
   --color-facebook: #5577ba;
-  --color-instagram: #b5698a;
+  --color-instagram: #8b5cf6;        /* violet：分類標籤色，刻意避開紅/粉以防與「警示/下滑」語意衝突 */
   --color-threads: #3d3d3d;
 
-  --font-sans: var(--font-inter), Arial, Helvetica, sans-serif;
+  --font-sans: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* 字距 token（供階段 2 套用；本階段僅定義） */
+  --tracking-display: -0.04em;
+  --tracking-section: -0.0266em;
 }
 
 body {

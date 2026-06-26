@@ -5,10 +5,10 @@ import { DEFAULT_BRAND } from '@/lib/config';
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const brand = sp.get('brand') ?? DEFAULT_BRAND;
-  const kpis = await getKpis({
+  const data = await getKpis({
     brand,
     dateStart: sp.get('start') ?? undefined,
     dateEnd: sp.get('end') ?? undefined,
   });
-  return NextResponse.json(kpis);
+  return NextResponse.json(data);
 }

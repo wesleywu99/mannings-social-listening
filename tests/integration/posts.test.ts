@@ -21,10 +21,12 @@ d('posts data layer (integration)', () => {
     if (rows.length) expect(rows[0].platform).toBe('threads');
   });
 
-  it('getKpis returns 3 platform entries', async () => {
+  it('getKpis returns 3 platform entries and matching trends', async () => {
     const { getKpis } = await import('@/lib/data/posts');
     const { DEFAULT_BRAND } = await import('@/lib/config');
-    const kpis = await getKpis({ brand: DEFAULT_BRAND });
+    const { kpis, trends } = await getKpis({ brand: DEFAULT_BRAND });
     expect(kpis).toHaveLength(3);
+    expect(Object.keys(trends).sort()).toEqual(['fb', 'ig', 'threads']);
+    expect(trends.threads).toEqual(expect.any(Array));
   });
 });

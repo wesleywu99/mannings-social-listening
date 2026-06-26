@@ -1,5 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server';
-import { computeKpis } from '@/lib/domain/aggregate';
+import { computeKpis, computeTrends, type TrendPoint } from '@/lib/domain/aggregate';
 import type { Platform, Post, PlatformKpis, PostSource } from '@/lib/domain/types';
 
 interface QueryArgs {
@@ -48,8 +48,11 @@ export async function queryPosts(args: QueryArgs): Promise<Post[]> {
 
 export async function getKpis(
   args: { brand: string; dateStart?: string; dateEnd?: string },
-): Promise<PlatformKpis[]> {
-  // KPI 需要全量（不分頁）才能算正確的 +2σ 與總量
+): Promise<{ kpis: PlatformKpis[]; trends: Record<Platform, TrendPoint[]> }> {
+  // KPI 需要全量（不分頁）才能算正確的 +2σ 與總量；趨勢搭同一份資料順帶算出（零額外查詢）
   const all = await queryPosts({ ...args });
-  return computeKpis(all);
+  return {
+    kpis: computeKpis(all),
+    trends: computeTrends(all, args.dateStart, args.dateEnd),
+  };
 }

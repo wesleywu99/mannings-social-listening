@@ -63,8 +63,8 @@ export function DateRangePicker({
   };
 
   const label = start || end
-    ? `${start || '…'}　—　${end || '…'}`
-    : '選擇日期範圍';
+    ? `${start || '…'} — ${end || '…'}`
+    : 'Select date range';
 
   const inRange = (d: Date) => {
     const s = ymd(d);
@@ -82,7 +82,7 @@ export function DateRangePicker({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 bg-surface border border-outline-variant rounded-xl px-3 py-2 text-xs font-semibold text-on-surface-variant hover:border-primary/40 transition-colors tabular-nums"
+        className="flex items-center gap-2 bg-surface border border-outline-variant rounded-md px-3 py-1.5 text-sm font-medium text-on-surface hover:border-on-surface/30 transition-colors tabular-nums"
       >
         {label}
         <span className="text-on-surface-variant/40">▾</span>
@@ -137,12 +137,12 @@ export function DateRangePicker({
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-outline-variant/20">
             <button
               onClick={() => { onChange('', ''); setAnchor(null); }}
-              className="text-[11px] font-bold text-on-surface-variant/50 hover:text-primary transition-colors"
-            >清除</button>
+              className="text-[11px] font-bold text-on-surface-variant/50 hover:text-on-surface transition-colors"
+            >Clear</button>
             <button
               onClick={() => setOpen(false)}
-              className="text-[11px] font-bold text-primary hover:opacity-80 transition-opacity"
-            >完成</button>
+              className="text-[11px] font-bold text-on-surface hover:opacity-80 transition-opacity"
+            >Done</button>
           </div>
         </div>
       )}

@@ -1,12 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
 import type { Platform, Post, PlatformKpis } from '@/lib/domain/types';
-import { PerspectiveSwitcher, type BrandRow } from './PerspectiveSwitcher';
+import type { TrendPoint } from '@/lib/domain/aggregate';
+import { BrandSelector, type BrandRow } from './BrandSelector';
 import { PlatformTabs } from './PlatformTabs';
 import { KpiRow } from './KpiRow';
 import { PostsTable } from './PostsTable';
 import { OverviewSummary } from './OverviewSummary';
 import { DateRangePicker } from './DateRangePicker';
+import { DateRangePresets } from './DateRangePresets';
 import { ChatWidget } from './ChatWidget';
 import { DEFAULT_BRAND } from '@/lib/config';
 import type { Scope } from '@/lib/ai/types';
@@ -17,6 +19,22 @@ const PLATFORM_LABEL: Record<Platform, string> = {
   fb: 'Facebook',
 };
 
+const DAY_MS = 86400000;
+
+/** 給定 [start,end]（含），回傳等長的「緊鄰上一期」[ps,pe]；缺日期回 null。 */
+function prevWindow(start: string, end: string): { start: string; end: string } | null {
+  if (!start || !end) return null;
+  const s = new Date(`${start}T00:00:00`);
+  const e = new Date(`${end}T00:00:00`);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return null;
+  const len = Math.round((e.getTime() - s.getTime()) / DAY_MS) + 1; // 含首尾天數
+  const pe = new Date(s.getTime() - DAY_MS); // 上期終點 = 本期起點前一天
+  const ps = new Date(pe.getTime() - (len - 1) * DAY_MS);
+  const f = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return { start: f(ps), end: f(pe) };
+}
+
 export function MonitorClient() {
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [brand, setBrand] = useState(DEFAULT_BRAND);
@@ -25,6 +43,8 @@ export function MonitorClient() {
   const [end, setEnd] = useState('');
   const [posts, setPosts] = useState<Post[]>([]);
   const [kpis, setKpis] = useState<PlatformKpis[]>([]);
+  const [trends, setTrends] = useState<Record<Platform, TrendPoint[]>>({} as Record<Platform, TrendPoint[]>);
+  const [prevKpis, setPrevKpis] = useState<PlatformKpis[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -43,20 +63,42 @@ export function MonitorClient() {
     };
     const postQs = range(new URLSearchParams({ brand, platform, limit: '500' }));
     const kpiQs = range(new URLSearchParams({ brand }));
-    Promise.all([
+    const pw = prevWindow(start, end);
+    const prevQs = pw ? range(new URLSearchParams({ brand, start: pw.start, end: pw.end })) : null;
+
+    const fetches: Promise<unknown>[] = [
       fetch(`/api/data/posts?${postQs}`).then((r) => r.json()),
       fetch(`/api/data/kpis?${kpiQs}`).then((r) => r.json()),
-    ])
-      .then(([p, k]) => {
-        setPosts(Array.isArray(p) ? p : []);
-        setKpis(Array.isArray(k) ? k : []);
+    ];
+    if (prevQs) fetches.push(fetch(`/api/data/kpis?${prevQs}`).then((r) => r.json()));
+
+    Promise.all(fetches)
+      .then((res) => {
+        const p = res[0];
+        const k = res[1];
+        const prev = res[2];
+        setPosts(Array.isArray(p) ? (p as Post[]) : []);
+        if (Array.isArray(k)) {
+          setKpis(k as PlatformKpis[]);
+          setTrends({} as Record<Platform, TrendPoint[]>);
+        } else {
+          const ko = k as { kpis?: PlatformKpis[]; trends?: Record<Platform, TrendPoint[]> };
+          setKpis(ko.kpis ?? []);
+          setTrends((ko.trends ?? {}) as Record<Platform, TrendPoint[]>);
+        }
+        if (Array.isArray(prev)) {
+          setPrevKpis(prev as PlatformKpis[]);
+        } else if (prev) {
+          setPrevKpis((prev as { kpis?: PlatformKpis[] }).kpis ?? []);
+        } else {
+          setPrevKpis([]);
+        }
       })
       .finally(() => setLoading(false));
   }, [brand, platform, start, end]);
 
   const kpi = kpis.find((k) => k.platform === platform);
   const population = posts.map((p) => p.engagementTotal ?? 0);
-  const ownTotal = kpis.reduce((sum, k) => sum + k.totalEngagement, 0);
 
   // chat / 解讀 共用範圍：以 brand + 日期為硬性篩選；platform 不鎖（讓 AI 跨平台分析）
   const scope: Scope = {
@@ -66,34 +108,36 @@ export function MonitorClient() {
   };
 
   return (
-    <div className="space-y-10">
-      <div className="flex items-center justify-end">
-        <DateRangePicker
-          start={start}
-          end={end}
-          onChange={(s, e) => { setStart(s); setEnd(e); }}
-        />
+    <div className="space-y-8">
+      {/* 統一控制列：左側資料源選擇器、右側時間篩選 */}
+      <div className="flex items-center justify-between gap-4 flex-wrap pb-4 border-b border-outline-variant">
+        <BrandSelector brands={brands} active={brand} onSelect={setBrand} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <DateRangePresets
+            start={start}
+            end={end}
+            onChange={(s, e) => { setStart(s); setEnd(e); }}
+          />
+          <DateRangePicker
+            start={start}
+            end={end}
+            onChange={(s, e) => { setStart(s); setEnd(e); }}
+          />
+        </div>
       </div>
 
-      <PerspectiveSwitcher
-        brands={brands}
-        active={brand}
-        ownTotalEngagement={ownTotal}
-        onSelect={setBrand}
-      />
-
-      <OverviewSummary kpis={kpis} />
+      <OverviewSummary kpis={kpis} prevKpis={prevKpis} trends={trends} />
 
       <section className="space-y-8">
         <PlatformTabs value={platform} onChange={setPlatform} />
-        {kpi && <KpiRow kpi={kpi} />}
+        {kpi && <KpiRow kpi={kpi} prev={prevKpis.find((x) => x.platform === platform)} />}
         <div className="bg-surface rounded-2xl card-shadow overflow-hidden border border-outline-variant">
           <div className="px-8 py-6 flex items-center gap-3 border-b border-outline-variant/10">
-            <h3 className="text-lg font-extrabold">{PLATFORM_LABEL[platform]}</h3>
+            <h3 className="text-lg font-semibold">{PLATFORM_LABEL[platform]}</h3>
             <div className="h-4 w-px bg-outline-variant" />
             <span className="text-xs text-on-surface-variant font-medium">
-              共 {posts.length} 筆{(start || end) && '（已篩選日期）'} · <span className="text-sentiment-neg font-bold">●</span> 代表 +2σ 爆款
-              {loading && ' · 載入中…'}
+              {posts.length} records{(start || end) && ' (filtered)'} · <span className="text-sentiment-neg font-bold">●</span> +2σ outlier
+              {loading && ' · Loading…'}
             </span>
           </div>
           <PostsTable posts={posts} population={population} platform={platform} scope={scope} />
