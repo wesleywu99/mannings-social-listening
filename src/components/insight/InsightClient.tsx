@@ -7,17 +7,19 @@ import { Heatmap } from './Heatmap';
 
 interface Report {
   summary: string; advice: string; content: string; platform: string; kol: string;
-  sentiment: string;
+  sentiment: string; topics: string;
   dateStart?: string; dateEnd?: string; generatedAt?: string;
 }
 interface Grp { group: string; postCount: number; totalEngagement: number; avgEngagement: number }
 interface Creator { username: string; posts: number; totalEngagement: number; avgEngagement: number; avgFollowers: number }
+interface Topic { name: string; description: string; postCount: number; totalEngagement: number; avgEngagement: number; posCount: number; negCount: number; neuCount: number }
 interface Stats {
   byPlatform?: { groups: Grp[] };
   byMedia?: { groups: Grp[] };
   creators?: { top: Creator[]; darkHorses: Creator[] };
   heatmap?: { matrix: number[][]; max: number; best: { weekday: number; hour: number; avg: number } | null };
   sentiment?: { summary: { posPct: number; neuPct: number; negPct: number; pos: number; neu: number; neg: number }; spikes: { date: string; level: string }[] };
+  topics?: Topic[];
 }
 
 const SECTIONS: { key: keyof Report; num: string; title: string }[] = [
@@ -27,6 +29,7 @@ const SECTIONS: { key: keyof Report; num: string; title: string }[] = [
   { key: 'platform', num: '04', title: '平台效能對比' },
   { key: 'kol', num: '05', title: '創作者表現亮點' },
   { key: 'sentiment', num: '06', title: '情感輿情' },
+  { key: 'topics', num: '07', title: '話題分析' },
 ];
 const PNAME: Record<string, string> = { ig: 'Instagram', threads: 'Threads', fb: 'Facebook' };
 
@@ -85,6 +88,25 @@ function leftFor(key: keyof Report, stats: Stats | null): { title: string; node:
               </div>
             </div>
           )}
+        </div>
+      ),
+    };
+  }
+  if (key === 'topics') {
+    const topics = stats.topics ?? [];
+    if (!topics.length) return null;
+    const items = topics.slice(0, 8).map((t) => ({ label: t.name, value: t.avgEngagement }));
+    const totalPosts = topics.reduce((s, t) => s + t.postCount, 0);
+    return {
+      title: '話題互動排名',
+      node: (
+        <div className="space-y-3">
+          <MiniBars items={items} />
+          <div className="pt-1.5 border-t border-outline-variant/40">
+            <p className="text-[10px] text-on-surface-variant/50 tabular-nums">
+              共 {topics.length} 個話題 · {totalPosts} 條帖子
+            </p>
+          </div>
         </div>
       ),
     };
@@ -154,7 +176,7 @@ export function InsightClient() {
       {error && <div className="bg-sentiment-neg/10 text-sentiment-neg text-sm rounded-xl px-4 py-3">生成失敗：{error}</div>}
       {loading && (
         <div className="space-y-5">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
+          {[0, 1, 2, 3, 4, 5, 6].map((i) => (
             <section key={i} className="bg-surface rounded-2xl border border-outline-variant card-shadow overflow-hidden">
               <div className="px-7 py-4 flex items-center gap-3 border-b border-outline-variant/60">
                 <span className="inline-block h-3 w-6 rounded bg-surface-container animate-pulse" />
@@ -199,11 +221,11 @@ export function InsightClient() {
             );
           })}
 
-          {/* 07 發文時段熱度（純數據模塊，全寬）*/}
+          {/* 08 發文時段熱度（純數據模塊，全寬）*/}
           {stats?.heatmap && stats.heatmap.max > 0 && (
             <section className="bg-surface rounded-2xl border border-outline-variant card-shadow overflow-hidden">
               <div className="px-7 py-4 flex items-center gap-3 border-b border-outline-variant/60">
-                <span className="font-mono text-xs font-semibold text-on-surface-variant/40 tracking-widest">07</span>
+                <span className="font-mono text-xs font-semibold text-on-surface-variant/40 tracking-widest">08</span>
                 <h2 className="text-base font-semibold text-on-surface">發文時段熱度</h2>
                 <span className="text-[11px] text-on-surface-variant/50 ml-1">三平台合計，每格 = 該時段平均互動量</span>
               </div>

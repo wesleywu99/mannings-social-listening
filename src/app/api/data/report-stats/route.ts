@@ -17,23 +17,22 @@ export async function GET(req: NextRequest) {
   };
   try {
     const tools = Object.fromEntries(buildTools(scope).map((t) => [t.name, t]));
-    const [byPlatformStats, creators, sentiment, allPosts] = await Promise.all([
+    const [byPlatformStats, creators, sentiment, allPosts, topics] = await Promise.all([
       tools.engagement_stats.run({ group_by: 'platform' }),
       tools.creator_ranking.run({ limit: 5 }),
       tools.sentiment_analysis.run({}),
       queryPosts({ brand: scope.brand, dateStart: scope.dateStart, dateEnd: scope.dateEnd }),
+      tools.topic_analysis.run({}),
     ]);
     const heatmap = computeHeatmap(allPosts);
-    // 媒體分組要另外查（engagement_stats group_by=media_type）
     const byMedia = await tools.engagement_stats.run({ group_by: 'media_type' });
-    const igTier = { tiers: [] };  // 舊 ig_tier_analysis 已移除，保留空避免前端壞
     return NextResponse.json({
       byPlatform: byPlatformStats,
       byMedia,
       creators,
-      igTier,
       heatmap,
       sentiment,
+      topics,
     });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

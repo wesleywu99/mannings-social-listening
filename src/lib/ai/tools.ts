@@ -13,6 +13,7 @@ import { anomalyThreshold, median } from '@/lib/domain/engagement';
 import type { Platform, Post } from '@/lib/domain/types';
 import type { Scope, ToolDef } from './types';
 import { percentile, mean, topShare, groupBy, round } from './stats';
+import { analyzeTopics } from './topics';
 
 const scopeParams = {
   platform: { type: 'string', enum: ['threads', 'ig', 'fb'], description: '平台；省略則用當前視角（跨平台）' },
@@ -330,6 +331,22 @@ export function buildTools(scope: Scope): ToolDef[] {
           sentiment: p.sentiment,
           url: p.postUrl,
         }));
+      },
+    },
+
+    // 6. 主題聚類（分層採樣 → LLM 分類 → 結構化話題列表）
+    {
+      name: 'topic_analysis',
+      description: '話題分析：從帖子內容中識別 5-10 個討論主題，含各主題的帖數、互動量、情感分布。回答「什麼話題最受關注」「哪些話題互動效率高」「負面集中在什麼話題」時用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          ...scopeParams,
+        },
+      },
+      run: async (args) => {
+        const posts = await fetchScoped(scope, args);
+        return analyzeTopics(posts, scope.dateStart, scope.dateEnd);
       },
     },
   ];
