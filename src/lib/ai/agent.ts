@@ -77,8 +77,9 @@ export async function runChat(
   return { answer: final.content ?? '（無法產生回應）', toolsUsed };
 }
 
-/** Agentic 對話（串流版）：yield { type, content } 事件給前端逐字渲染 */
+/** Agentic 對話（串流版）：yield 事件給前端逐字渲染 */
 export type ChatStreamEvent =
+  | { type: 'thought'; content: string }
   | { type: 'delta'; content: string }
   | { type: 'tools'; toolsUsed: string[] }
   | { type: 'done'; toolsUsed: string[] };
@@ -114,18 +115,29 @@ export async function* runChatStream(
     });
 
     let result = null;
+    // reasoning_content 逐字流為 thought；content 逐字流為 delta
+    // 但中間輪（有 tool_calls）的 content 視為 thought 一部分
+    let roundContent = '';
+    let hasToolCalls = false;
+
     for await (const ev of stream) {
-      if (ev.type === 'delta' && ev.content) {
-        yield { type: 'delta', content: ev.content };
+      if (ev.type === 'reasoning' && ev.content) {
+        yield { type: 'thought', content: ev.content };
+      } else if (ev.type === 'delta' && ev.content) {
+        roundContent += ev.content;
+        // 先不 yield delta，等知道這輪是否為最終回答
       } else if (ev.type === 'done') {
         result = ev.result;
+        hasToolCalls = !!(result?.tool_calls?.length);
       }
     }
     if (!result) break;
 
-    if (result.tool_calls?.length) {
+    if (hasToolCalls) {
+      // 中間輪的 content 視為 thought
+      if (roundContent) yield { type: 'thought', content: roundContent };
       messages.push({ role: 'assistant', content: result.content ?? null, tool_calls: result.tool_calls });
-      for (const tc of result.tool_calls) {
+      for (const tc of result.tool_calls!) {
         let toolResult: unknown;
         try {
           const args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
@@ -144,6 +156,7 @@ export async function* runChatStream(
     // 補救：第一輪未呼叫工具 → 強制取數後再試一輪
     if (i === 0 && !firstRoundSkippedTools) {
       firstRoundSkippedTools = true;
+      if (roundContent) yield { type: 'thought', content: roundContent };
       messages.push({ role: 'assistant', content: result.content ?? null });
       messages.push({
         role: 'system',
@@ -151,6 +164,9 @@ export async function* runChatStream(
       });
       continue;
     }
+
+    // 最終回答：逐字 yield delta
+    for (const ch of roundContent) yield { type: 'delta', content: ch };
     yield { type: 'done', toolsUsed };
     return;
   }
@@ -158,7 +174,9 @@ export async function* runChatStream(
   // 超過工具迴圈上限：強制要最終回答（不帶工具，串流）
   const finalStream = chatCompletionStream({ model: getModelHeavy(), messages, maxTokens: 2000 });
   for await (const ev of finalStream) {
-    if (ev.type === 'delta' && ev.content) {
+    if (ev.type === 'reasoning' && ev.content) {
+      yield { type: 'thought', content: ev.content };
+    } else if (ev.type === 'delta' && ev.content) {
       yield { type: 'delta', content: ev.content };
     }
   }

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Scope } from '@/lib/ai/types';
 import { AIText } from './aiText';
 
-interface Msg { role: 'user' | 'assistant'; content: string; followups?: string[]; }
+interface Msg { role: 'user' | 'assistant'; content: string; thought?: string; followups?: string[]; }
 
 const SAMPLES = ['哪個平台互動效率最高？', 'Top 3 創作者是誰？', '最佳發文時段是什麼時候？'];
 
@@ -13,6 +13,28 @@ function parseFollowups(text: string): { content: string; followups: string[] } 
   if (!m) return { content: text, followups: [] };
   const followups = m[1].split('\n').map((s) => s.replace(/^[-*\d.、]+\s*/, '').trim()).filter(Boolean);
   return { content: text.slice(0, m.index).trim(), followups };
+}
+
+/** 推理過程摺疊塊 */
+function ThoughtBlock({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  if (!text.trim()) return null;
+  return (
+    <div className="mb-2">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wide text-mute hover:text-on-surface-variant transition-colors"
+      >
+        <span className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
+        推理過程
+      </button>
+      {open && (
+        <div className="mt-1.5 pl-3 border-l-2 border-outline-variant/60 text-[11px] leading-relaxed text-on-surface-variant/70 whitespace-pre-wrap">
+          {text}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ChatWidget({ scope }: { scope: Scope }) {
@@ -43,6 +65,7 @@ export function ChatWidget({ scope }: { scope: Scope }) {
       const decoder = new TextDecoder();
       let buffer = '';
       let accContent = '';
+      let accThought = '';
       const toolsUsed: string[] = [];
 
       while (true) {
@@ -58,11 +81,18 @@ export function ChatWidget({ scope }: { scope: Scope }) {
           if (data === '[DONE]') continue;
           try {
             const ev = JSON.parse(data);
-            if (ev.type === 'delta' && ev.content) {
+            if (ev.type === 'thought' && ev.content) {
+              accThought += ev.content;
+              setMsgs((m) => {
+                const copy = [...m];
+                copy[copy.length - 1] = { role: 'assistant', content: accContent, thought: accThought };
+                return copy;
+              });
+            } else if (ev.type === 'delta' && ev.content) {
               accContent += ev.content;
               setMsgs((m) => {
                 const copy = [...m];
-                copy[copy.length - 1] = { role: 'assistant', content: accContent };
+                copy[copy.length - 1] = { role: 'assistant', content: accContent, thought: accThought };
                 return copy;
               });
             } else if (ev.type === 'tools' && ev.toolsUsed) {
@@ -72,7 +102,7 @@ export function ChatWidget({ scope }: { scope: Scope }) {
               const { content, followups } = parseFollowups(accContent);
               setMsgs((m) => {
                 const copy = [...m];
-                copy[copy.length - 1] = { role: 'assistant', content, followups };
+                copy[copy.length - 1] = { role: 'assistant', content, thought: accThought, followups };
                 return copy;
               });
             } else if (ev.type === 'error') {
@@ -134,6 +164,7 @@ export function ChatWidget({ scope }: { scope: Scope }) {
                   : 'bg-surface-container rounded-2xl rounded-bl-sm px-3.5 py-2.5 text-sm max-w-[90%] text-on-surface leading-relaxed'}>
                   {m.role === 'assistant' ? (
                     <>
+                      {m.thought && <ThoughtBlock text={m.thought} />}
                       {m.content ? <AIText text={m.content} /> : <span className="text-on-surface-variant/60">分析中…</span>}
                       {m.followups && m.followups.length > 0 && (
                         <div className="mt-2.5 pt-2.5 border-t border-outline-variant/40 space-y-1.5">

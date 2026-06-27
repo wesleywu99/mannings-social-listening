@@ -20,6 +20,16 @@ const scopeParams = {
   date_end: { type: 'string', description: '結束日期（YYYY-MM-DD）；省略則用當前視角' },
 };
 
+/** 任意組合過濾參數（用於 ad-hoc 聚合 + content_samples） */
+const filterParams = {
+  ...scopeParams,
+  username: { type: 'string', description: '精確帳號（不分大小寫），如查某個創作者時用' },
+  follower_min: { type: 'number', description: '粉絲數下限（含）' },
+  follower_max: { type: 'number', description: '粉絲數上限（不含）' },
+  sentiment: { type: 'string', enum: ['pos', 'neu', 'neg'], description: '情感標記過濾' },
+  search: { type: 'string', description: '內容關鍵字' },
+};
+
 async function fetchScoped(scope: Scope, args: Record<string, unknown>, forcePlatform?: Platform): Promise<Post[]> {
   return queryPosts({
     brand: scope.brand,  // 品牌硬鎖當前視角，不開放給 AI 跨品牌查
@@ -27,6 +37,10 @@ async function fetchScoped(scope: Scope, args: Record<string, unknown>, forcePla
     dateStart: (args.date_start as string) ?? scope.dateStart,
     dateEnd: (args.date_end as string) ?? scope.dateEnd,
     search: (args.search as string) ?? undefined,
+    username: (args.username as string) ?? undefined,
+    followerMin: (args.follower_min as number) ?? undefined,
+    followerMax: (args.follower_max as number) ?? undefined,
+    sentiment: (args.sentiment as Post['sentiment']) ?? undefined,
   });
 }
 
@@ -246,23 +260,63 @@ export function buildTools(scope: Scope): ToolDef[] {
       },
     },
 
+    // 4.5 Ad-hoc 聚合（任意組合過濾 → 預聚合統計，不返回 raw array）
+    {
+      name: 'aggregate_filtered',
+      description: 'Ad-hoc 聚合：對任意組合過濾條件（帳號/粉絲區間/關鍵詞/情感/平台/日期）做預聚合統計。回答「@某人表現如何」「含X的帖情感如何」「粉絲1-10萬誰互動高」等預設工具未覆蓋的問題時用。返回統計描述（帖數/互動/情感占比/Top5帖摘要），不返回 raw array。',
+      parameters: {
+        type: 'object',
+        properties: filterParams,
+      },
+      run: async (args) => {
+        const posts = await fetchScoped(scope, args);
+        const e = engs(posts);
+        const summary = computeSentimentSummary(posts);
+        // Top 5 帖摘要（精簡，不帶 raw metrics）
+        const top = [...posts].slice(0, 5).map((p) => ({
+          platform: p.platform,
+          username: p.username,
+          content: (p.content ?? '').slice(0, 120),
+          engagement: p.engagementTotal,
+          sentiment: p.sentiment,
+          postTime: p.postTime,
+        }));
+        return {
+          filter: {
+            platform: args.platform ?? 'all',
+            username: args.username ?? null,
+            followerRange: [args.follower_min ?? null, args.follower_max ?? null],
+            sentiment: args.sentiment ?? null,
+            search: args.search ?? null,
+            dateRange: [args.date_start ?? null, args.date_end ?? null],
+          },
+          stats: {
+            postCount: posts.length,
+            totalEngagement: e.reduce((a, b) => a + b, 0),
+            avgEngagement: round(mean(e)),
+            medianEngagement: median(e),
+            p90: round(percentile(e, 90)),
+          },
+          sentiment: summary,
+          topPosts: top,
+        };
+      },
+    },
+
     // 5. 帖文樣本（受限 raw，僅用於看具體帖文）
     {
       name: 'content_samples',
-      description: '取出符合條件的帖文樣本（按互動量或時間排序）。僅用於「看具體帖文」「列出 Top 帖」時用；統計性問題請用 engagement_stats。回傳字段精簡（無 raw metrics 全量）。',
+      description: '取出符合條件的帖文樣本（按互動量或時間排序）。支持任意組合過濾（帳號/粉絲區間/關鍵詞/情感/平台/日期）。僅用於「看具體帖文」「列出 Top 帖」時用；統計性問題請用 engagement_stats 或 aggregate_filtered。回傳字段精簡。',
       parameters: {
         type: 'object',
         properties: {
-          ...scopeParams,
-          search: { type: 'string', description: '在內容中搜尋的關鍵字' },
-          sentiment: { type: 'string', enum: ['pos', 'neu', 'neg'], description: '篩選情感' },
+          ...filterParams,
           sort_by: { type: 'string', enum: ['engagement', 'recent'], description: '排序，預設 engagement' },
           limit: { type: 'number', description: '回傳筆數，預設 5，最多 15' },
         },
       },
       run: async (args) => {
         let posts = await fetchScoped(scope, args);
-        if (args.sentiment) posts = posts.filter((p) => p.sentiment === args.sentiment);
         if (args.sort_by === 'recent') posts = [...posts].sort((a, b) => b.postTime.localeCompare(a.postTime));
         const limit = Math.min((args.limit as number) ?? 5, 15);
         return posts.slice(0, limit).map((p) => ({

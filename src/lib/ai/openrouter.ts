@@ -73,7 +73,7 @@ export interface StreamResult {
 
 export async function* chatCompletionStream(
   opts: CompletionOpts,
-): AsyncGenerator<{ type: 'delta' | 'tool_calls' | 'done'; content?: string; result?: StreamResult }> {
+): AsyncGenerator<{ type: 'delta' | 'reasoning' | 'tool_calls' | 'done'; content?: string; result?: StreamResult }> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) throw new Error('Missing OPENROUTER_API_KEY');
 
@@ -118,7 +118,11 @@ export async function* chatCompletionStream(
         const json = JSON.parse(data);
         const delta = json.choices?.[0]?.delta;
         if (!delta) continue;
-        // 內容 delta（reasoning_content 不流給前端，是模型推理過程）
+        // reasoning_content = 模型推理過程（thought），逐字流給前端顯示
+        if (delta.reasoning_content) {
+          yield { type: 'reasoning', content: delta.reasoning_content };
+        }
+        // content = 最終回答內容
         if (delta.content) {
           content += delta.content;
           yield { type: 'delta', content: delta.content };

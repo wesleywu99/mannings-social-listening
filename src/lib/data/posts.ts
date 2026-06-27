@@ -10,6 +10,10 @@ interface QueryArgs {
   limit?: number;
   offset?: number;
   search?: string;
+  username?: string;        // 精確匹配帳號
+  followerMin?: number;     // 粉絲數區間下限
+  followerMax?: number;     // 粉絲數區間上限
+  sentiment?: 'pos' | 'neu' | 'neg';
 }
 
 function rowToPost(r: Record<string, unknown>): Post {
@@ -50,6 +54,10 @@ export async function queryPosts(args: QueryArgs): Promise<Post[]> {
   if (args.dateStart) q = q.gte('post_time', args.dateStart);
   if (args.dateEnd) q = q.lte('post_time', args.dateEnd);
   if (args.search) q = q.ilike('content', `%${args.search}%`);
+  if (args.username) q = q.ilike('username', args.username);
+  if (args.followerMin != null) q = q.gte('follower_count', args.followerMin);
+  if (args.followerMax != null) q = q.lt('follower_count', args.followerMax);
+  if (args.sentiment) q = q.eq('sentiment', args.sentiment);
   if (args.limit) q = q.range(args.offset ?? 0, (args.offset ?? 0) + args.limit - 1);
   const { data, error } = await q;
   if (error) throw error;
