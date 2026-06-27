@@ -1,8 +1,8 @@
 import 'server-only';
-import { chatCompletion, getModelHeavy } from './openrouter';
+import { chatCompletion, chatCompletionStream, getModelHeavy } from './openrouter';
 import { buildTools } from './tools';
 import { BASE_SYSTEM_PROMPT, INSIGHT_SYSTEM_PROMPT, DAY_INSIGHT_SYSTEM_PROMPT, MODULE_INSIGHT_SYSTEM_PROMPT, scopeNote } from './prompts';
-import { getKpis, queryPosts } from '@/lib/data/posts';
+import { getKpis, queryPosts, getBrandContext } from '@/lib/data/posts';
 import { median } from '@/lib/domain/engagement';
 import type { Platform, Post } from '@/lib/domain/types';
 import type { Scope, ChatMessage } from './types';
@@ -21,8 +21,14 @@ export async function runChat(
   }));
   const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
 
+  // 品牌背景注入（多品牌時每品牌獨立 context）
+  const brandContext = await getBrandContext(scope.brand);
+  const brandNote = brandContext
+    ? `\n\n【品牌背景】${JSON.stringify(brandContext)}`
+    : '';
+
   const messages: ChatMessage[] = [
-    { role: 'system', content: `${BASE_SYSTEM_PROMPT}\n\n${scopeNote(scope)}` },
+    { role: 'system', content: `${BASE_SYSTEM_PROMPT}${brandNote}\n\n${scopeNote(scope)}` },
     ...userMessages,
   ];
   const toolsUsed: string[] = [];
@@ -69,6 +75,94 @@ export async function runChat(
   // 超過工具迴圈上限：強制要最終回答（不帶工具）
   const final = await chatCompletion({ model: getModelHeavy(), messages });
   return { answer: final.content ?? '（無法產生回應）', toolsUsed };
+}
+
+/** Agentic 對話（串流版）：yield { type, content } 事件給前端逐字渲染 */
+export type ChatStreamEvent =
+  | { type: 'delta'; content: string }
+  | { type: 'tools'; toolsUsed: string[] }
+  | { type: 'done'; toolsUsed: string[] };
+
+export async function* runChatStream(
+  userMessages: ChatMessage[],
+  scope: Scope,
+): AsyncGenerator<ChatStreamEvent> {
+  const tools = buildTools(scope);
+  const toolSchemas = tools.map((t) => ({
+    type: 'function' as const,
+    function: { name: t.name, description: t.description, parameters: t.parameters },
+  }));
+  const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
+
+  const brandContext = await getBrandContext(scope.brand);
+  const brandNote = brandContext ? `\n\n【品牌背景】${JSON.stringify(brandContext)}` : '';
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: `${BASE_SYSTEM_PROMPT}${brandNote}\n\n${scopeNote(scope)}` },
+    ...userMessages,
+  ];
+  const toolsUsed: string[] = [];
+  let firstRoundSkippedTools = false;
+
+  for (let i = 0; i < MAX_TOOL_ROUNDS; i++) {
+    const stream = chatCompletionStream({
+      model: getModelHeavy(),
+      messages,
+      tools: toolSchemas,
+      toolChoice: 'auto',
+      maxTokens: 2000,
+    });
+
+    let result = null;
+    for await (const ev of stream) {
+      if (ev.type === 'delta' && ev.content) {
+        yield { type: 'delta', content: ev.content };
+      } else if (ev.type === 'done') {
+        result = ev.result;
+      }
+    }
+    if (!result) break;
+
+    if (result.tool_calls?.length) {
+      messages.push({ role: 'assistant', content: result.content ?? null, tool_calls: result.tool_calls });
+      for (const tc of result.tool_calls) {
+        let toolResult: unknown;
+        try {
+          const args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
+          const tool = byName[tc.function.name];
+          toolResult = tool ? await tool.run(args) : { error: `unknown tool ${tc.function.name}` };
+        } catch (e) {
+          toolResult = { error: String(e) };
+        }
+        toolsUsed.push(tc.function.name);
+        yield { type: 'tools', toolsUsed: [...toolsUsed] };
+        messages.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify(toolResult) });
+      }
+      continue;
+    }
+
+    // 補救：第一輪未呼叫工具 → 強制取數後再試一輪
+    if (i === 0 && !firstRoundSkippedTools) {
+      firstRoundSkippedTools = true;
+      messages.push({ role: 'assistant', content: result.content ?? null });
+      messages.push({
+        role: 'system',
+        content: '你剛才未呼叫任何工具。記住規則：回答任何數據相關問題前必須先呼叫至少一個工具取得真實數字。請現在立即呼叫一個適當的工具。',
+      });
+      continue;
+    }
+    yield { type: 'done', toolsUsed };
+    return;
+  }
+
+  // 超過工具迴圈上限：強制要最終回答（不帶工具，串流）
+  const finalStream = chatCompletionStream({ model: getModelHeavy(), messages, maxTokens: 2000 });
+  for await (const ev of finalStream) {
+    if (ev.type === 'delta' && ev.content) {
+      yield { type: 'delta', content: ev.content };
+    }
+  }
+  yield { type: 'done', toolsUsed };
 }
 
 export interface DayInsight { topic: string; cause: string; actions: string; }

@@ -35,6 +35,13 @@ export async function listBrands() {
   return data;
 }
 
+export async function getBrandContext(brand: string): Promise<Record<string, unknown> | null> {
+  const supa = createServiceClient();
+  const { data, error } = await supa.from('brands').select('context').eq('name', brand).limit(1);
+  if (error || !data?.length) return null;
+  return (data[0].context as Record<string, unknown>) ?? null;
+}
+
 export async function queryPosts(args: QueryArgs): Promise<Post[]> {
   const supa = createServiceClient();
   let q = supa.from('posts').select('*').eq('brand', args.brand)

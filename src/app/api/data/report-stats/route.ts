@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { buildTools } from '@/lib/ai/tools';
 import { queryPosts } from '@/lib/data/posts';
-import { computeHeatmap, computeSentimentSummary, computeSentimentTrend, detectSentimentSpikes } from '@/lib/domain/aggregate';
+import { computeHeatmap } from '@/lib/domain/aggregate';
 import { DEFAULT_BRAND } from '@/lib/config';
 import type { Scope } from '@/lib/ai/types';
 
@@ -17,19 +17,24 @@ export async function GET(req: NextRequest) {
   };
   try {
     const tools = Object.fromEntries(buildTools(scope).map((t) => [t.name, t]));
-    const [byPlatform, byMedia, creators, igTier, allPosts] = await Promise.all([
-      tools.aggregate_metrics.run({ group_by: 'platform' }),
-      tools.aggregate_metrics.run({ group_by: 'media_type' }),
-      tools.top_creators.run({ limit: 5 }),
-      tools.ig_tier_analysis.run({}),
+    const [byPlatformStats, creators, sentiment, allPosts] = await Promise.all([
+      tools.engagement_stats.run({ group_by: 'platform' }),
+      tools.creator_ranking.run({ limit: 5 }),
+      tools.sentiment_analysis.run({}),
       queryPosts({ brand: scope.brand, dateStart: scope.dateStart, dateEnd: scope.dateEnd }),
     ]);
     const heatmap = computeHeatmap(allPosts);
-    const sentiment = {
-      summary: computeSentimentSummary(allPosts),
-      spikes: detectSentimentSpikes(computeSentimentTrend(allPosts, start ?? undefined, end ?? undefined)),
-    };
-    return NextResponse.json({ byPlatform, byMedia, creators, igTier, heatmap, sentiment });
+    // 媒體分組要另外查（engagement_stats group_by=media_type）
+    const byMedia = await tools.engagement_stats.run({ group_by: 'media_type' });
+    const igTier = { tiers: [] };  // 舊 ig_tier_analysis 已移除，保留空避免前端壞
+    return NextResponse.json({
+      byPlatform: byPlatformStats,
+      byMedia,
+      creators,
+      igTier,
+      heatmap,
+      sentiment,
+    });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

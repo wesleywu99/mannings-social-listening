@@ -1,20 +1,28 @@
 import 'server-only';
 import { queryPosts } from '@/lib/data/posts';
-import { median } from '@/lib/domain/engagement';
-import { computeSentimentSummary, computeSentimentTrend, detectSentimentSpikes } from '@/lib/domain/aggregate';
+import {
+  computeKpis,
+  computeTrends,
+  detectBreakouts,
+  computeSentimentSummary,
+  computeSentimentTrend,
+  detectSentimentSpikes,
+  type TrendPoint,
+} from '@/lib/domain/aggregate';
+import { anomalyThreshold, median } from '@/lib/domain/engagement';
 import type { Platform, Post } from '@/lib/domain/types';
 import type { Scope, ToolDef } from './types';
 import { percentile, mean, topShare, groupBy, round } from './stats';
 
 const scopeParams = {
-  platform: { type: 'string', enum: ['threads', 'ig', 'fb'], description: '平台；省略則用當前視角' },
+  platform: { type: 'string', enum: ['threads', 'ig', 'fb'], description: '平台；省略則用當前視角（跨平台）' },
   date_start: { type: 'string', description: '起始日期（YYYY-MM-DD）；省略則用當前視角' },
   date_end: { type: 'string', description: '結束日期（YYYY-MM-DD）；省略則用當前視角' },
 };
 
 async function fetchScoped(scope: Scope, args: Record<string, unknown>, forcePlatform?: Platform): Promise<Post[]> {
   return queryPosts({
-    brand: (args.brand as string) ?? scope.brand,
+    brand: scope.brand,  // 品牌硬鎖當前視角，不開放給 AI 跨品牌查
     platform: forcePlatform ?? ((args.platform as Platform) ?? scope.platform),
     dateStart: (args.date_start as string) ?? scope.dateStart,
     dateEnd: (args.date_end as string) ?? scope.dateEnd,
@@ -22,28 +30,36 @@ async function fetchScoped(scope: Scope, args: Record<string, unknown>, forcePla
   });
 }
 
-const engs = (posts: Post[]) => posts.map((p) => p.engagementTotal ?? 0);
-
-function summarize(posts: Post[]) {
-  const e = engs(posts);
-  return {
-    postCount: posts.length,
-    totalEngagement: e.reduce((a, b) => a + b, 0),
-    avgEngagement: round(mean(e)),
-    medianEngagement: median(e),
+/** 取上一期（與當前視角等長的緊鄰區間） */
+function prevRange(scope: Scope): { dateStart: string; dateEnd: string } | null {
+  if (!scope.dateStart || !scope.dateEnd) return null;
+  const DAY = 86400000;
+  const s = new Date(scope.dateStart).getTime();
+  const e = new Date(scope.dateEnd).getTime();
+  if (Number.isNaN(s) || Number.isNaN(e)) return null;
+  const len = Math.round((e - s) / DAY) + 1;
+  const pe = s - DAY;
+  const ps = pe - (len - 1) * DAY;
+  const f = (t: number) => {
+    const d = new Date(t);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
   };
+  return { dateStart: `${f(ps)}T00:00:00`, dateEnd: `${f(pe)}T23:59:59` };
 }
+
+const engs = (posts: Post[]) => posts.map((p) => p.engagementTotal ?? 0);
 
 export function buildTools(scope: Scope): ToolDef[] {
   return [
+    // 1. 互動統計（含跨期對比）
     {
-      name: 'aggregate_metrics',
-      description: '聚合互動指標（帖數/總互動/均值/中位數），可按平台、媒體類型、日期、星期分組。回答整體表現、比較類問題時用。',
+      name: 'engagement_stats',
+      description: '互動指標統計：帖數/總互動/均值/中位數/百分位/集中度，可按平台/媒體分組，含與上一期的變化（Δ）。回答整體表現、平台對比、比上期好或差時用。',
       parameters: {
         type: 'object',
         properties: {
           ...scopeParams,
-          group_by: { type: 'string', enum: ['overall', 'platform', 'media_type', 'day', 'weekday'], description: '分組維度' },
+          group_by: { type: 'string', enum: ['overall', 'platform', 'media_type'], description: '分組維度，預設 overall' },
         },
       },
       run: async (args) => {
@@ -53,132 +69,161 @@ export function buildTools(scope: Scope): ToolDef[] {
           overall: () => 'all',
           platform: (p) => p.platform,
           media_type: (p) => p.mediaType ?? 'unknown',
-          day: (p) => p.postTime.slice(0, 10),
-          weekday: (p) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(p.postTime).getDay()],
         };
         const groups = groupBy(posts, keyFn[gb] ?? keyFn.overall);
-        return {
-          group_by: gb,
-          groups: [...groups.entries()].map(([group, ps]) => ({ group, ...summarize(ps) })),
-        };
+
+        // 當期統計
+        const cur = [...groups.entries()].map(([group, ps]) => {
+          const e = engs(ps);
+          return {
+            group,
+            postCount: ps.length,
+            totalEngagement: e.reduce((a, b) => a + b, 0),
+            avgEngagement: round(mean(e)),
+            medianEngagement: median(e),
+            p25: round(percentile(e, 25)),
+            p75: round(percentile(e, 75)),
+            p90: round(percentile(e, 90)),
+            top10pctShare: round(topShare(e, 10), 3),  // 集中度
+            anomalyRate: ps.length ? e.filter((x) => x > anomalyThreshold(e)).length / ps.length : 0,
+            sentiment: computeSentimentSummary(ps),
+          };
+        });
+
+        // 上一期對比（僅 overall 模式做跨期，分組模式跨期太複雜）
+        let comparison: { prevPostCount: number; prevTotalEng: number; prevAvg: number; deltaTotal: number; deltaAvg: number } | null = null;
+        if (gb === 'overall') {
+          const pr = prevRange(scope);
+          if (pr) {
+            const prevPosts = await queryPosts({ brand: scope.brand, dateStart: pr.dateStart, dateEnd: pr.dateEnd });
+            const pe = engs(prevPosts);
+            const curTotal = cur[0]?.totalEngagement ?? 0;
+            const curAvg = cur[0]?.avgEngagement ?? 0;
+            const prevTotal = pe.reduce((a, b) => a + b, 0);
+            const prevAvg = prevPosts.length ? mean(pe) : 0;
+            comparison = {
+              prevPostCount: prevPosts.length,
+              prevTotalEng: prevTotal,
+              prevAvg: round(prevAvg),
+              deltaTotal: prevTotal ? round((curTotal - prevTotal) / prevTotal, 3) : 0,
+              deltaAvg: prevAvg ? round((curAvg - prevAvg) / prevAvg, 3) : 0,
+            };
+          }
+        }
+
+        return { group_by: gb, groups: cur, comparison };
       },
     },
+
+    // 2. 趨勢分析（時間序列 + 破圈 + 情感趨勢 + 突增信號）
     {
-      name: 'query_posts',
-      description: '取出符合條件的貼文清單（預設按互動量由高到低）。要看具體貼文、Top 榜、含某關鍵字的貼文時用。',
+      name: 'trend_analysis',
+      description: '時間趨勢分析：逐日/週的互動量+帖數+情感占比序列、破圈日清單、負面突增信號。回答「哪天爆了」「最近趨勢如何」「負面何時上升」時用。',
       parameters: {
         type: 'object',
         properties: {
           ...scopeParams,
-          search: { type: 'string', description: '在內容中搜尋的關鍵字' },
-          sort_by: { type: 'string', enum: ['engagement', 'recent'], description: '排序方式' },
-          limit: { type: 'number', description: '回傳筆數，預設 10' },
+          metric: { type: 'string', enum: ['engagement', 'posts', 'sentiment'], description: '趨勢指標，預設 engagement' },
         },
       },
       run: async (args) => {
-        let posts = await fetchScoped(scope, args);
-        if (args.sort_by === 'recent') posts = [...posts].sort((a, b) => b.postTime.localeCompare(a.postTime));
-        const limit = Math.min((args.limit as number) ?? 10, 30);
-        return posts.slice(0, limit).map((p) => ({
-          platform: p.platform,
-          postTime: p.postTime,
-          username: p.username,
-          content: (p.content ?? '').slice(0, 200),
-          engagement: p.engagementTotal,
-          likes: p.likes,
-          comments: p.comments,
-          url: p.postUrl,
+        const posts = await fetchScoped(scope, args);
+        const trends = computeTrends(posts, args.date_start as string, args.date_end as string);
+        // 合併三平台為全平台序列
+        const platforms: Platform[] = ['ig', 'threads', 'fb'];
+        const days = trends[platforms[0]] ?? [];
+        const merged = days.map((_, i) => ({
+          date: days[i].date,
+          engagement: platforms.reduce((s, p) => s + (trends[p]?.[i]?.engagement ?? 0), 0),
+          posts: platforms.reduce((s, p) => s + (trends[p]?.[i]?.posts ?? 0), 0),
         }));
+
+        const engSeries = merged.map((m) => m.engagement);
+        const postSeries = merged.map((m) => m.posts);
+        const flags = detectBreakouts(engSeries, postSeries);
+        const breakouts = merged
+          .map((m, i) => ({ date: m.date, engagement: m.engagement, posts: m.posts, ...flags[i] }))
+          .filter((x) => x.eff || x.peak);
+
+        const sentimentTrend = computeSentimentTrend(posts, args.date_start as string, args.date_end as string);
+        const sentimentSpikes = detectSentimentSpikes(sentimentTrend);
+
+        return {
+          series: merged,
+          breakouts,  // 破圈日
+          sentimentSpikes,  // 負面突增
+          summary: {
+            totalDays: merged.length,
+            breakoutCount: breakouts.length,
+            spikeCount: sentimentSpikes.length,
+            bestDay: merged.length ? merged.reduce((a, b) => (b.engagement > a.engagement ? b : a)) : null,
+          },
+        };
       },
     },
+
+    // 3. 創作者排名（含黑馬偵測）
     {
-      name: 'top_creators',
-      description: '依互動量排出 Top 創作者/帳號，含集中度（頭部帳號佔比）。分析 KOL 表現、誰貢獻最多聲量時用。',
+      name: 'creator_ranking',
+      description: '創作者排名：Top N 帳號依互動量，含集中度、黑馬（粉少互動高）、衰退（高粉低互動）。回答「誰貢獻最多聲量」「有哪些黑馬KOL」時用。',
       parameters: {
         type: 'object',
-        properties: { ...scopeParams, limit: { type: 'number', description: 'Top N，預設 10' } },
+        properties: {
+          ...scopeParams,
+          limit: { type: 'number', description: 'Top N，預設 10' },
+        },
       },
       run: async (args) => {
         const posts = await fetchScoped(scope, args);
         const byUser = groupBy(posts, (p) => p.username ?? '(unknown)');
-        const rows = [...byUser.entries()].map(([username, ps]) => ({
-          username,
-          posts: ps.length,
-          totalEngagement: engs(ps).reduce((a, b) => a + b, 0),
-          avgEngagement: round(mean(engs(ps))),
-        })).sort((a, b) => b.totalEngagement - a.totalEngagement);
-        const total = rows.reduce((a, b) => a + b.totalEngagement, 0);
+        const rows = [...byUser.entries()].map(([username, ps]) => {
+          const e = engs(ps);
+          const avgFollowers = ps.length ? mean(ps.map((p) => p.followerCount ?? 0)) : 0;
+          return {
+            username,
+            posts: ps.length,
+            totalEngagement: e.reduce((a, b) => a + b, 0),
+            avgEngagement: round(mean(e)),
+            avgFollowers: Math.round(avgFollowers),
+            platforms: [...new Set(ps.map((p) => p.platform))],
+          };
+        }).sort((a, b) => b.totalEngagement - a.totalEngagement);
+
+        const total = rows.reduce((s, r) => s + r.totalEngagement, 0);
         const limit = Math.min((args.limit as number) ?? 10, 30);
+        const top = rows.slice(0, limit);
+
+        // 黑馬：粉絲 < 1萬 且 平均互動 > 整體均值的 1.5 倍
+        const overallAvg = total ? total / posts.length : 0;
+        const darkHorses = rows
+          .filter((r) => r.avgFollowers > 0 && r.avgFollowers < 10000 && r.avgEngagement > overallAvg * 1.5)
+          .slice(0, 5);
+
+        // 衰退：粉絲 > 5萬 且 平均互動 < 整體均值的 0.5 倍
+        const declining = rows
+          .filter((r) => r.avgFollowers > 50000 && r.avgEngagement < overallAvg * 0.5)
+          .slice(0, 5);
+
         return {
           totalCreators: rows.length,
-          top10Share: total ? round(rows.slice(0, Math.ceil(rows.length * 0.1)).reduce((a, b) => a + b.totalEngagement, 0) / total, 3) : 0,
-          creators: rows.slice(0, limit),
+          top10Share: total ? round(rows.slice(0, Math.ceil(rows.length * 0.1)).reduce((s, r) => s + r.totalEngagement, 0) / total, 3) : 0,
+          top,
+          darkHorses,
+          declining,
         };
       },
     },
+
+    // 4. 情感分析（占比 + 突增 + Top 負面帖摘要）
     {
-      name: 'engagement_distribution',
-      description: '互動量分佈：百分位（P10–P99）與集中度（Top10%/25%/50% 帖佔總互動比）。判斷「頭部依賴型 vs 遍地開花型」時用。',
-      parameters: { type: 'object', properties: { ...scopeParams } },
-      run: async (args) => {
-        const posts = await fetchScoped(scope, args);
-        const e = engs(posts);
-        return {
-          count: e.length,
-          min: e.length ? Math.min(...e) : 0,
-          max: e.length ? Math.max(...e) : 0,
-          mean: round(mean(e)),
-          median: median(e),
-          p10: round(percentile(e, 10)), p25: round(percentile(e, 25)), p50: round(percentile(e, 50)),
-          p75: round(percentile(e, 75)), p90: round(percentile(e, 90)), p95: round(percentile(e, 95)), p99: round(percentile(e, 99)),
-          top10pctShare: round(topShare(e, 10), 3),
-          top25pctShare: round(topShare(e, 25), 3),
-          top50pctShare: round(topShare(e, 50), 3),
-        };
-      },
-    },
-    {
-      name: 'time_patterns',
-      description: '發文時段分析：各小時與各星期的平均互動。回答「最佳發文時間」「哪天表現好」時用。',
-      parameters: { type: 'object', properties: { ...scopeParams } },
-      run: async (args) => {
-        const posts = await fetchScoped(scope, args);
-        const byHour = groupBy(posts, (p) => String(new Date(p.postTime).getHours()));
-        const byWeekday = groupBy(posts, (p) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(p.postTime).getDay()]);
-        return {
-          byHour: [...byHour.entries()].map(([hour, ps]) => ({ hour: Number(hour), posts: ps.length, avgEngagement: round(mean(engs(ps))) })).sort((a, b) => a.hour - b.hour),
-          byWeekday: [...byWeekday.entries()].map(([weekday, ps]) => ({ weekday, posts: ps.length, avgEngagement: round(mean(engs(ps))) })),
-        };
-      },
-    },
-    {
-      name: 'ig_tier_analysis',
-      description: 'Instagram 粉絲分層分析（nano/micro/macro/mega），各層平均互動、互動率，以及破圈貼文（互動量 > 粉絲數）。僅適用 IG。',
-      parameters: { type: 'object', properties: { date_start: scopeParams.date_start, date_end: scopeParams.date_end } },
-      run: async (args) => {
-        const posts = await fetchScoped(scope, args, 'ig');
-        const tierOf = (f: number) => (f < 10000 ? 'nano(<1萬)' : f < 100000 ? 'micro(1-10萬)' : f < 1000000 ? 'macro(10-100萬)' : 'mega(>100萬)');
-        const withF = posts.filter((p) => (p.followerCount ?? 0) > 0);
-        const tiers = groupBy(withF, (p) => tierOf(p.followerCount ?? 0));
-        const breakout = posts.filter((p) => (p.engagementTotal ?? 0) > (p.followerCount ?? Infinity));
-        return {
-          tiers: [...tiers.entries()].map(([tier, ps]) => ({
-            tier,
-            posts: ps.length,
-            avgEngagement: round(mean(engs(ps))),
-            avgEngagementRate: round(mean(ps.map((p) => (p.engagementTotal ?? 0) / (p.followerCount || 1))), 4),
-          })),
-          breakoutPosts: breakout.length,
-          breakoutExamples: breakout.slice(0, 5).map((p) => ({ username: p.username, engagement: p.engagementTotal, followers: p.followerCount })),
-        };
-      },
-    },
-    {
-      name: 'sentiment_breakdown',
-      description: '情感輿情分析：正/負/中占比、負面突增信號、Top 負面貼文。回答「負面聲量」「情緒占比」「為什麼負面上升」時用。',
+      name: 'sentiment_analysis',
+      description: '情感輿情：正/中/負占比、情緒指數、負面突增信號、Top 負面帖文摘要。回答「負面聲量」「情緒健康度」「為什麼負面上升」時用。',
       parameters: {
         type: 'object',
-        properties: { ...scopeParams, top_n: { type: 'number', description: '回傳 Top N 負面貼文，預設 5' } },
+        properties: {
+          ...scopeParams,
+          top_n: { type: 'number', description: '回傳 Top N 負面帖摘要，預設 5' },
+        },
       },
       run: async (args) => {
         const posts = await fetchScoped(scope, args);
@@ -195,8 +240,42 @@ export function buildTools(scope: Scope): ToolDef[] {
             content: (p.content ?? '').slice(0, 150),
             engagement: p.engagementTotal,
             score: p.sentimentScore,
+            postTime: p.postTime,
           }));
         return { summary, spikes, topNegativePosts: topNeg };
+      },
+    },
+
+    // 5. 帖文樣本（受限 raw，僅用於看具體帖文）
+    {
+      name: 'content_samples',
+      description: '取出符合條件的帖文樣本（按互動量或時間排序）。僅用於「看具體帖文」「列出 Top 帖」時用；統計性問題請用 engagement_stats。回傳字段精簡（無 raw metrics 全量）。',
+      parameters: {
+        type: 'object',
+        properties: {
+          ...scopeParams,
+          search: { type: 'string', description: '在內容中搜尋的關鍵字' },
+          sentiment: { type: 'string', enum: ['pos', 'neu', 'neg'], description: '篩選情感' },
+          sort_by: { type: 'string', enum: ['engagement', 'recent'], description: '排序，預設 engagement' },
+          limit: { type: 'number', description: '回傳筆數，預設 5，最多 15' },
+        },
+      },
+      run: async (args) => {
+        let posts = await fetchScoped(scope, args);
+        if (args.sentiment) posts = posts.filter((p) => p.sentiment === args.sentiment);
+        if (args.sort_by === 'recent') posts = [...posts].sort((a, b) => b.postTime.localeCompare(a.postTime));
+        const limit = Math.min((args.limit as number) ?? 5, 15);
+        return posts.slice(0, limit).map((p) => ({
+          platform: p.platform,
+          postTime: p.postTime,
+          username: p.username,
+          content: (p.content ?? '').slice(0, 200),
+          engagement: p.engagementTotal,
+          likes: p.likes,
+          comments: p.comments,
+          sentiment: p.sentiment,
+          url: p.postUrl,
+        }));
       },
     },
   ];

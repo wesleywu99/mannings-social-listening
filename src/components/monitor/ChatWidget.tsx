@@ -3,9 +3,17 @@ import { useEffect, useRef, useState } from 'react';
 import type { Scope } from '@/lib/ai/types';
 import { AIText } from './aiText';
 
-interface Msg { role: 'user' | 'assistant'; content: string; }
+interface Msg { role: 'user' | 'assistant'; content: string; followups?: string[]; }
 
 const SAMPLES = ['哪個平台互動效率最高？', 'Top 3 創作者是誰？', '最佳發文時段是什麼時候？'];
+
+/** 從回答末尾解析 ===FOLLOWUPS=== 推薦問題 */
+function parseFollowups(text: string): { content: string; followups: string[] } {
+  const m = text.match(/===FOLLOWUPS===\s*([\s\S]*)$/i);
+  if (!m) return { content: text, followups: [] };
+  const followups = m[1].split('\n').map((s) => s.replace(/^[-*\d.、]+\s*/, '').trim()).filter(Boolean);
+  return { content: text.slice(0, m.index).trim(), followups };
+}
 
 export function ChatWidget({ scope }: { scope: Scope }) {
   const [open, setOpen] = useState(false);
@@ -20,19 +28,69 @@ export function ChatWidget({ scope }: { scope: Scope }) {
     const q = (text ?? input).trim();
     if (!q || loading) return;
     const next: Msg[] = [...msgs, { role: 'user', content: q }];
-    setMsgs(next);
+    setMsgs([...next, { role: 'assistant', content: '' }]);
     setInput('');
     setLoading(true);
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next, scope }),
+        body: JSON.stringify({ messages: next.map((m) => ({ role: m.role, content: m.content })), scope }),
       });
-      const data = await res.json();
-      setMsgs((m) => [...m, { role: 'assistant', content: data.answer ?? data.error ?? '（無回應）' }]);
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let accContent = '';
+      const toolsUsed: string[] = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const data = trimmed.slice(5).trim();
+          if (data === '[DONE]') continue;
+          try {
+            const ev = JSON.parse(data);
+            if (ev.type === 'delta' && ev.content) {
+              accContent += ev.content;
+              setMsgs((m) => {
+                const copy = [...m];
+                copy[copy.length - 1] = { role: 'assistant', content: accContent };
+                return copy;
+              });
+            } else if (ev.type === 'tools' && ev.toolsUsed) {
+              toolsUsed.length = 0;
+              toolsUsed.push(...ev.toolsUsed);
+            } else if (ev.type === 'done') {
+              const { content, followups } = parseFollowups(accContent);
+              setMsgs((m) => {
+                const copy = [...m];
+                copy[copy.length - 1] = { role: 'assistant', content, followups };
+                return copy;
+              });
+            } else if (ev.type === 'error') {
+              setMsgs((m) => {
+                const copy = [...m];
+                copy[copy.length - 1] = { role: 'assistant', content: '發生錯誤：' + ev.message };
+                return copy;
+              });
+            }
+          } catch { /* ignore */ }
+        }
+      }
     } catch (e) {
-      setMsgs((m) => [...m, { role: 'assistant', content: '發生錯誤：' + String(e) }]);
+      setMsgs((m) => {
+        const copy = [...m];
+        copy[copy.length - 1] = { role: 'assistant', content: '發生錯誤：' + String(e) };
+        return copy;
+      });
     } finally {
       setLoading(false);
     }
@@ -74,11 +132,25 @@ export function ChatWidget({ scope }: { scope: Scope }) {
                 <div className={m.role === 'user'
                   ? 'bg-primary text-on-primary rounded-2xl rounded-br-sm px-3.5 py-2 text-sm max-w-[80%]'
                   : 'bg-surface-container rounded-2xl rounded-bl-sm px-3.5 py-2.5 text-sm max-w-[90%] text-on-surface leading-relaxed'}>
-                  {m.role === 'assistant' ? <AIText text={m.content} /> : m.content}
+                  {m.role === 'assistant' ? (
+                    <>
+                      {m.content ? <AIText text={m.content} /> : <span className="text-on-surface-variant/60">分析中…</span>}
+                      {m.followups && m.followups.length > 0 && (
+                        <div className="mt-2.5 pt-2.5 border-t border-outline-variant/40 space-y-1.5">
+                          <p className="text-[10px] font-mono uppercase tracking-wide text-mute">繼續追問</p>
+                          {m.followups.slice(0, 4).map((f, j) => (
+                            <button key={j} onClick={() => send(f)} className="block w-full text-left text-[12px] px-2.5 py-1.5 rounded-lg bg-surface hover:bg-primary/5 hover:text-primary transition-colors border border-outline-variant/60">
+                              {f}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : m.content}
                 </div>
               </div>
             ))}
-            {loading && (
+            {loading && msgs[msgs.length - 1]?.role === 'user' && (
               <div className="flex justify-start">
                 <div className="bg-surface-container rounded-2xl px-3.5 py-2.5 text-sm text-on-surface-variant/60">分析中…</div>
               </div>

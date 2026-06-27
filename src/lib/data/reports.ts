@@ -27,7 +27,7 @@ export async function saveReport(brand: string, dateStart: string, dateEnd: stri
   const { error } = await supa.from('ai_reports').upsert({
     brand, date_start: dateStart, date_end: dateEnd,
     summary: s.summary, advice: s.advice, content: s.content,
-    platform: s.platform, kol: s.kol, ig_rate: s.igRate,
+    platform: s.platform, kol: s.kol,
     sentiment: s.sentiment,
     generated_at: new Date().toISOString(),
   }, { onConflict: 'brand,date_start,date_end' });
@@ -44,7 +44,7 @@ export async function getLatestReport(brand: string): Promise<StoredReport | nul
   return {
     brand: r.brand, dateStart: r.date_start, dateEnd: r.date_end, generatedAt: r.generated_at,
     summary: r.summary ?? '', advice: r.advice ?? '', content: r.content ?? '',
-    platform: r.platform ?? '', kol: r.kol ?? '', igRate: r.ig_rate ?? '',
+    platform: r.platform ?? '', kol: r.kol ?? '',
     sentiment: r.sentiment ?? '',
   };
 }

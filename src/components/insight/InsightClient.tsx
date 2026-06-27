@@ -6,16 +6,16 @@ import { MiniKpis, MiniBars, CreatorList } from './MiniViz';
 import { Heatmap } from './Heatmap';
 
 interface Report {
-  summary: string; advice: string; content: string; platform: string; kol: string; igRate: string;
+  summary: string; advice: string; content: string; platform: string; kol: string;
   sentiment: string;
   dateStart?: string; dateEnd?: string; generatedAt?: string;
 }
 interface Grp { group: string; postCount: number; totalEngagement: number; avgEngagement: number }
+interface Creator { username: string; posts: number; totalEngagement: number; avgEngagement: number; avgFollowers: number }
 interface Stats {
   byPlatform?: { groups: Grp[] };
   byMedia?: { groups: Grp[] };
-  creators?: { creators: { username: string; posts: number; totalEngagement: number }[] };
-  igTier?: { tiers: { tier: string; avgEngagementRate: number }[] };
+  creators?: { top: Creator[]; darkHorses: Creator[] };
   heatmap?: { matrix: number[][]; max: number; best: { weekday: number; hour: number; avg: number } | null };
   sentiment?: { summary: { posPct: number; neuPct: number; negPct: number; pos: number; neu: number; neg: number }; spikes: { date: string; level: string }[] };
 }
@@ -26,8 +26,7 @@ const SECTIONS: { key: keyof Report; num: string; title: string }[] = [
   { key: 'content', num: '03', title: '內容表現洞察' },
   { key: 'platform', num: '04', title: '平台效能對比' },
   { key: 'kol', num: '05', title: '創作者表現亮點' },
-  { key: 'igRate', num: '06', title: 'IG 互動率分層' },
-  { key: 'sentiment', num: '08', title: '情感輿情' },
+  { key: 'sentiment', num: '06', title: '情感輿情' },
 ];
 const PNAME: Record<string, string> = { ig: 'Instagram', threads: 'Threads', fb: 'Facebook' };
 
@@ -56,12 +55,8 @@ function leftFor(key: keyof Report, stats: Stats | null): { title: string; node:
     return items.length ? { title: '平台互動量', node: <MiniBars items={items} /> } : null;
   }
   if (key === 'kol') {
-    const items = (stats.creators?.creators ?? []).slice(0, 5);
+    const items = (stats.creators?.top ?? []).slice(0, 5);
     return items.length ? { title: 'Top 創作者', node: <CreatorList items={items} /> } : null;
-  }
-  if (key === 'igRate') {
-    const items = (stats.igTier?.tiers ?? []).map((t) => ({ label: t.tier, value: t.avgEngagementRate }));
-    return items.length ? { title: '各層平均互動率', node: <MiniBars items={items} pct /> } : null;
   }
   if (key === 'sentiment') {
     const s = stats.sentiment?.summary;
