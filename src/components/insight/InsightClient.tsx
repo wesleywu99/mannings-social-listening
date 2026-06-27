@@ -152,7 +152,23 @@ export function InsightClient() {
       </div>
 
       {error && <div className="bg-sentiment-neg/10 text-sentiment-neg text-sm rounded-xl px-4 py-3">生成失敗：{error}</div>}
-      {loading && <div className="text-on-surface-variant/50 text-sm">載入中…</div>}
+      {loading && (
+        <div className="space-y-5">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <section key={i} className="bg-surface rounded-2xl border border-outline-variant card-shadow overflow-hidden">
+              <div className="px-7 py-4 flex items-center gap-3 border-b border-outline-variant/60">
+                <span className="inline-block h-3 w-6 rounded bg-surface-container animate-pulse" />
+                <span className="inline-block h-4 w-32 rounded bg-surface-container animate-pulse" />
+              </div>
+              <div className="px-7 py-6 space-y-2">
+                <span className="block h-3 w-full rounded bg-surface-container animate-pulse" />
+                <span className="block h-3 w-11/12 rounded bg-surface-container animate-pulse" />
+                <span className="block h-3 w-4/5 rounded bg-surface-container animate-pulse" />
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
       {!loading && !report && !generating && (
         <div className="text-center py-20 text-on-surface-variant/50"><p className="text-sm">尚未有報告，點右上角「生成報告」開始。</p></div>
       )}

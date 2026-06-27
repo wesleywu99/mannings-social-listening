@@ -13,6 +13,7 @@ import { DateRangePresets } from './DateRangePresets';
 import { ChatWidget } from './ChatWidget';
 import { MentionContext } from './mentionContext';
 import { useInsightCache } from './useInsightCache';
+import { KpiSkeleton, TrendSentimentSkeleton, PlatformTableSkeleton, PostsTableSkeleton } from './Skeleton';
 import { DEFAULT_BRAND } from '@/lib/config';
 import type { Scope } from '@/lib/ai/types';
 
@@ -185,57 +186,69 @@ export function MonitorClient() {
         </div>
       </div>
 
-      <OverviewSummary kpis={kpis} prevKpis={prevKpis} trends={trends} scope={scope} closeSignal={closeSignal} allPosts={allPosts} scopeDates={{ start, end }} />
+      {!booted ? (
+        /* 開機載入骨架 */
+        <>
+          <KpiSkeleton />
+          <TrendSentimentSkeleton />
+          <PlatformTableSkeleton />
+          <PostsTableSkeleton />
+        </>
+      ) : (
+        <>
+          <OverviewSummary kpis={kpis} prevKpis={prevKpis} trends={trends} scope={scope} closeSignal={closeSignal} allPosts={allPosts} scopeDates={{ start, end }} />
 
-      <section className="space-y-8">
-        <PlatformTabs value={platform} onChange={setPlatform} />
-        <div id="posts-table-card" className="bg-surface rounded-2xl card-shadow overflow-hidden border border-outline-variant">
-          <div className="px-6 py-4 flex items-center justify-between gap-3 border-b border-outline-variant/60 flex-wrap">
-            <div className="flex items-center gap-3 min-w-0">
-              <h3 className="text-lg font-semibold">{PLATFORM_LABEL[platform]}</h3>
-              <div className="h-4 w-px bg-outline-variant" />
-              <span className="text-xs text-on-surface-variant/70 font-medium tabular-nums">
-                {shown.length}{q && ` / ${posts.length}`} records{(start || end) ? ' · filtered' : ''} · <span className="text-sentiment-neg font-bold">●</span> +2σ
-                {loading && ' · Loading…'}
-              </span>
+          <section className="space-y-8">
+            <PlatformTabs value={platform} onChange={setPlatform} />
+            <div id="posts-table-card" className="bg-surface rounded-2xl card-shadow overflow-hidden border border-outline-variant">
+              <div className="px-6 py-4 flex items-center justify-between gap-3 border-b border-outline-variant/60 flex-wrap">
+                <div className="flex items-center gap-3 min-w-0">
+                  <h3 className="text-lg font-semibold">{PLATFORM_LABEL[platform]}</h3>
+                  <div className="h-4 w-px bg-outline-variant" />
+                  <span className="text-xs text-on-surface-variant/70 font-medium tabular-nums">
+                    {shown.length}{q && ` / ${posts.length}`} records{(start || end) ? ' · filtered' : ''} · <span className="text-sentiment-neg font-bold">●</span> +2σ
+                    {loading && ' · Loading…'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {searchOpen && (
+                    <input
+                      autoFocus
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Escape') { setSearch(''); setSearchOpen(false); } }}
+                      placeholder="搜尋內容或帳號…"
+                      className="h-8 w-44 rounded-md border border-outline-variant bg-surface px-2.5 text-xs text-on-surface outline-none focus:border-on-surface/40 transition-colors"
+                    />
+                  )}
+                  <button
+                    title="搜尋貼文 / 帳號"
+                    onClick={() => { setSearchOpen((o) => { if (o) setSearch(''); return !o; }); }}
+                    className={`w-8 h-8 inline-flex items-center justify-center rounded-md border transition-colors ${searchOpen ? 'border-on-surface/40 text-on-surface' : 'border-outline-variant text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}`}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+                  </button>
+                  <button
+                    title="下載目前資料 (CSV)"
+                    onClick={handleDownload}
+                    disabled={!shown.length}
+                    className="w-8 h-8 inline-flex items-center justify-center rounded-md border border-outline-variant text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors disabled:opacity-40"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="m7 11 5 5 5-5" /><path d="M5 21h14" /></svg>
+                  </button>
+                  <button
+                    onClick={() => setModuleOpen(true)}
+                    className="inline-flex items-center h-8 px-3 rounded-md bg-primary text-on-primary text-[13px] font-semibold hover:bg-ai-hover transition-colors"
+                  >
+                    AI 解讀
+                  </button>
+                </div>
+              </div>
+              <PostsTable posts={shown} population={population} platform={platform} scope={scope} closeSignal={closeSignal} insightCache={insightCache} />
             </div>
-            <div className="flex items-center gap-2">
-              {searchOpen && (
-                <input
-                  autoFocus
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Escape') { setSearch(''); setSearchOpen(false); } }}
-                  placeholder="搜尋內容或帳號…"
-                  className="h-8 w-44 rounded-md border border-outline-variant bg-surface px-2.5 text-xs text-on-surface outline-none focus:border-on-surface/40 transition-colors"
-                />
-              )}
-              <button
-                title="搜尋貼文 / 帳號"
-                onClick={() => { setSearchOpen((o) => { if (o) setSearch(''); return !o; }); }}
-                className={`w-8 h-8 inline-flex items-center justify-center rounded-md border transition-colors ${searchOpen ? 'border-on-surface/40 text-on-surface' : 'border-outline-variant text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}`}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-              </button>
-              <button
-                title="下載目前資料 (CSV)"
-                onClick={handleDownload}
-                disabled={!shown.length}
-                className="w-8 h-8 inline-flex items-center justify-center rounded-md border border-outline-variant text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors disabled:opacity-40"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="m7 11 5 5 5-5" /><path d="M5 21h14" /></svg>
-              </button>
-              <button
-                onClick={() => setModuleOpen(true)}
-                className="inline-flex items-center h-8 px-3 rounded-md bg-primary text-on-primary text-[13px] font-semibold hover:bg-ai-hover transition-colors"
-              >
-                AI 解讀
-              </button>
-            </div>
-          </div>
-          <PostsTable posts={shown} population={population} platform={platform} scope={scope} closeSignal={closeSignal} insightCache={insightCache} />
-        </div>
-      </section>
+          </section>
+        </>
+      )}
 
       {moduleOpen && <ModuleInsightModal platform={platform} scope={scope} onClose={() => setModuleOpen(false)} insightCache={insightCache} />}
 
