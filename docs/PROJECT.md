@@ -139,18 +139,72 @@ npm test                   # 單元 + 整合測試
 
 | 優先 | 項目 | 說明 | 狀態 |
 |---|---|---|---|
-| P0 | 時區（部署） | Vercel 設 `TZ=Asia/Hong_Kong`（不需改碼） | 🔜 部署時 |
+| P0 | 時區（部署） | Vercel 設 `TZ=Asia/Hong_Kong`（不需改碼） | 🔜 待用戶在 Vercel Dashboard 設 env var + redeploy |
 | P0 | 數據清潔 | normalize trim 前後空白/換行；username 已清 | ✅ |
 | P0 | 雜訊日期 | 2026-06-26 經 DB 直查確認無雜訊日期（earliest 2025-04-30，latest 2026-05-02）；預設 30 天視窗已避開稀疏期 | ✅ |
-| P1 | 情感分析 | posts 加 `sentiment`+`sentiment_score` 欄；AI 批次標記；UI 占比條+負面突增複合信號（red/orange/yellow）+AI 成因；Insight 第 8 段 | ✅ |
-| P1 | 數據串聯 | @mention 已做；創作者/媒體/熱力圖格點擊回填仍未做 | ⬜ |
-| P2 | 內容主題聚類 | 原 Index.html 第 ⑧ 模塊「內容主題洞察」：貼文按主題分群 | ⬜ |
-| P2 | Chat 升級 | 串流逐字輸出 + 後續問題 chip（`===FOLLOWUPS===`）+ @mention 可點 | ⬜ |
-| P2 | 全頁 loading 骨架 | 總覽/趨勢資料到位前的骨架 | ⬜ |
+| P0 | Vercel 部署 | 已綁定 GitHub 自動部署；需設 `TZ` env var | 🔜 待設 env |
+| P1 | 情感分析 | posts 加 `sentiment`+`sentiment_score`；AI 批次標記 456 篇（pos 295/neu 156/neg 5）；圓環餅圖 + 負面突增複合信號（red/orange/yellow）+ AI 成因；Insight 第 06 段 | ✅ |
+| P1 | 數據串聯 | @mention 已做；創作者/媒體/熱力圖格點擊回填未做（整體完善後回顧） | ⬜ |
+| P2 | Chat 升級 | ✅ 串流逐字輸出 + 後續問題 chip + ReAct thought 透明 + 工具重構為 5 統計型 + ad-hoc 聚合 + 品牌背景注入 | ✅ |
+| P2 | 全頁 loading 骨架 | MonitorClient 開機骨架 + InsightClient 報告骨架 | ✅ |
+| P2 | 內容主題聚類 | 混合方案（算法聚類 + AI 命名）。**待設計問題**：多品牌場景下 Insight 頁主題模塊如何呈現？單品牌專屬 vs 跨品牌對比？ | ⬜ 待設計 |
 | P3 | 主動告警 | 破圈/負面突增 → email/Slack | ⬜ |
 | P3 | 競品對標 | 等 n8n 競品 flow（schema 已備，零重工） | ⬜ |
 | P3 | Email 日報 | `subscribers` 表 + n8n email 節點 | ⬜ |
 | P3 | Supabase Auth | 取代 token gate | ⬜ |
+
+### 9.1 已完成項目詳情
+
+**P1 情感分析**（commit `c7f102d`, `65b874c`）
+- Schema: `0005_sentiment.sql`（posts + ai_reports 加欄）
+- 456 篇全部標記：pos 295 (65%) / neu 156 (34%) / neg 5 (1%)
+- neg 樣本經驗證為真實負面（活動報名系統故障、曬傷抱怨）
+- UI: OverviewSummary 圓環餅圖（2/3 趨勢 + 1/3 情感）、DayDetailModal 當日情感卡、PostsTable 情感列已移除（點開貼文即可見）
+- AI: runInsight 傳 sentiment，INSIGHT_SYSTEM_PROMPT 納入情感維度
+- 配色: pos `#0f766e` 墨綠 / neu `#d4d4d4` 灰 / neg `#ee0000` Vercel error
+
+**P2 Chat 串流 + ReAct**（commit `948ce8a`, `c2620ec`）
+- 工具重構 7 → 5 統計型：engagement_stats / trend_analysis / creator_ranking / sentiment_analysis / content_samples
+- 新增 aggregate_filtered：任意組合過濾（帳號/粉絲區間/關鍵詞/情感/平台/日期）→ 預聚合統計
+- 第一性原則：AI 拿預聚合統計做解讀，不拿 raw data 自己算
+- 串流 SSE：reasoning_content → thought 事件（可摺疊渲染），content → delta 事件（逐字）
+- 後續問題 chip：`===FOLLOWUPS===` 解析
+- 品牌背景注入：`0006_brand_context.sql`，brands.context jsonb，服務端按 scope.brand 查
+- ReAct 多步查詢實測：@charlztrevor → 2 工具 + 135 thought + 875 delta，正確返回數據
+
+**P2 全頁 loading 骨架**（commit `68654bf`）
+- MonitorClient: KpiSkeleton / TrendSentimentSkeleton / PlatformTableSkeleton / PostsTableSkeleton
+- InsightClient: 6 段報告卡片骨架
+- Geist 風：surface-container 灰塊 + hairline 卡 + pulse 動畫
+
+**AI 解讀快取**（commit `65b874c`）
+- useInsightCache: 頁面級記憶體快取
+- PostDetailModal key=`post:{id}`，ModuleInsightModal key=`module:{brand}:{platform}:{dateStart}:{dateEnd}`
+- 「重新解讀」強制刷新（force=true）
+
+### 9.2 P2 內容主題聚類 — 待設計問題
+
+用戶提問：**多品牌場景下 Insight 頁主題模塊如何呈現？**
+
+待決策點：
+1. 主題是「品牌專屬」還是「跨品牌共享」？Mannings 的主題 vs 競品的主題是否可比？
+2. Insight 頁是「單品牌報告」還是「跨品牌對比報告」？當前架構是單品牌（scope.brand 鎖定）
+3. 主題聚類的粒度：大主題（5-8 個）vs 細主題（15-20 個）？
+4. 主題命名：AI 一次性生成 vs 人工標籤庫？
+5. 主題的時間演進：主題是否隨時間變化？如何呈現趨勢？
+
+實現方案（已選）: 混合 — 算法聚類（關鍵詞共現）+ AI 命名
+- 算法: TF-IDF 提取高頻詞 + 共現矩陣聚成原始簇
+- AI: 給每個簇命名 + 描述（一次性，可快取）
+- 統計: 每主題的帖數/互動/情感/Top 帖
+
+### 9.3 後續計劃（優先序）
+
+1. **P0 時區**（待用戶操作）：Vercel 設 `TZ=Asia/Hong_Kong` + redeploy
+2. **P2 內容主題聚類**（待設計決策）：先回答 9.2 的問題再動手
+3. **P1 數據串聯**（整體完善後回顧）：創作者/媒體/熱力圖格點擊回填
+4. **P2 Chat 問題**（整體完善後回顧）：實測發現的問題再修
+5. **P3** 主動告警 / 競品對標 / Email 日報 / Supabase Auth
 
 ## 10. 已知問題 / 注意
 
