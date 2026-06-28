@@ -1,5 +1,5 @@
 import 'server-only';
-import { queryPosts } from '@/lib/data/posts';
+import { queryPosts, listBrands } from '@/lib/data/posts';
 import {
   computeKpis,
   computeTrends,
@@ -33,7 +33,7 @@ const filterParams = {
 
 async function fetchScoped(scope: Scope, args: Record<string, unknown>, forcePlatform?: Platform): Promise<Post[]> {
   return queryPosts({
-    brand: scope.brand,  // 品牌硬鎖當前視角，不開放給 AI 跨品牌查
+    brand: (args.brand as string) ?? scope.brand,
     platform: forcePlatform ?? ((args.platform as Platform) ?? scope.platform),
     dateStart: (args.date_start as string) ?? scope.dateStart,
     dateEnd: (args.date_end as string) ?? scope.dateEnd,
@@ -347,6 +347,118 @@ export function buildTools(scope: Scope): ToolDef[] {
       run: async (args) => {
         const posts = await fetchScoped(scope, args);
         return analyzeTopics(posts, scope.dateStart, scope.dateEnd);
+      },
+    },
+
+    // 7. 競品對比（多品牌聲量/互動/情感/內容差距分析）
+    {
+      name: 'competitor_benchmark',
+      description: '競品對比分析：比較自有品牌與所有競品的聲量份額、互動效率、情感健康度、內容策略差距、KOL 重疊。回答「競品表現如何」「我們的優勢和弱點」「競品做了什麼我們沒做」時用。若無競品資料則回傳空結果。',
+      parameters: {
+        type: 'object',
+        properties: {
+          ...scopeParams,
+        },
+      },
+      run: async (args) => {
+        const MIN_POSTS = 10;
+        const brands = await listBrands();
+        const competitors = brands.filter((b: Record<string, unknown>) => !b.is_own);
+        if (competitors.length === 0) return { error: 'no_competitors', brands: [] };
+
+        const dateStart = (args.date_start as string) ?? scope.dateStart;
+        const dateEnd = (args.date_end as string) ?? scope.dateEnd;
+
+        // 並行取所有品牌帖子
+        const allBrands = [scope.brand, ...competitors.map((c: Record<string, unknown>) => c.name as string)];
+        const brandPosts = new Map<string, Post[]>();
+        await Promise.all(
+          allBrands.map(async (brand) => {
+            brandPosts.set(brand, await queryPosts({ brand, dateStart, dateEnd }));
+          }),
+        );
+
+        // 各品牌基礎指標
+        const comparisons = allBrands.map((brand) => {
+          const posts = brandPosts.get(brand) ?? [];
+          const engs = posts.map((p) => p.engagementTotal ?? 0);
+          const totalEng = engs.reduce((a, b) => a + b, 0);
+          return {
+            brand,
+            isOwn: brand === scope.brand,
+            postCount: posts.length,
+            totalEngagement: totalEng,
+            avgEngagement: posts.length ? Math.round(mean(engs)) : 0,
+            medianEngagement: median(engs),
+            sentiment: computeSentimentSummary(posts),
+            sufficient: posts.length >= MIN_POSTS,
+          };
+        });
+
+        // Share of Voice（互動量份額）
+        const grandTotalEng = comparisons.reduce((s, c) => s + c.totalEngagement, 0);
+        const shareOfVoice = comparisons.map((c) => ({
+          brand: c.brand,
+          isOwn: c.isOwn,
+          engagementShare: grandTotalEng ? round(c.totalEngagement / grandTotalEng, 3) : 0,
+          postShare: round(
+            c.postCount / Math.max(1, comparisons.reduce((s, x) => s + x.postCount, 0)), 3,
+          ),
+        }));
+
+        // 只保留數據充足的品牌做深度對比
+        const sufficient = comparisons.filter((c) => c.sufficient);
+        const ourPosts = brandPosts.get(scope.brand) ?? [];
+
+        // KOL 重疊分析
+        const ourUsernames = new Set(ourPosts.map((p) => p.username).filter(Boolean));
+        const kolOverlap: Array<{ username: string; ownEngagement: number; competitorBrand: string; competitorEngagement: number }> = [];
+        for (const comp of competitors) {
+          const compPosts = brandPosts.get(comp.name) ?? [];
+          const byUser = groupBy(compPosts, (p) => p.username ?? '');
+          for (const [username, ps] of byUser) {
+            if (!username || !ourUsernames.has(username)) continue;
+            const compEng = ps.reduce((s, p) => s + (p.engagementTotal ?? 0), 0);
+            const ownEng = ourPosts
+              .filter((p) => p.username === username)
+              .reduce((s, p) => s + (p.engagementTotal ?? 0), 0);
+            kolOverlap.push({ username, ownEngagement: ownEng, competitorBrand: comp.name, competitorEngagement: compEng });
+          }
+        }
+
+        // 內容格式分布對比
+        const formatMix = allBrands.map((brand) => {
+          const posts = brandPosts.get(brand) ?? [];
+          if (posts.length < MIN_POSTS) return null;
+          const byMedia = groupBy(posts, (p) => p.mediaType ?? 'unknown');
+          return {
+            brand,
+            mix: [...byMedia.entries()].map(([type, ps]) => ({
+              type,
+              count: ps.length,
+              share: round(ps.length / posts.length, 2),
+              avgEngagement: Math.round(mean(ps.map((p) => p.engagementTotal ?? 0))),
+            })),
+          };
+        }).filter(Boolean);
+
+        return {
+          ownBrand: scope.brand,
+          shareOfVoice,
+          engagementEfficiency: sufficient.map((c) => ({
+            brand: c.brand, isOwn: c.isOwn, avgEngagement: c.avgEngagement, medianEngagement: c.medianEngagement,
+          })),
+          sentimentComparison: sufficient.map((c) => ({
+            brand: c.brand, isOwn: c.isOwn,
+            posPct: c.sentiment.posPct, negPct: c.sentiment.negPct, avgScore: c.sentiment.avgScore,
+          })),
+          kolOverlap: kolOverlap.sort((a, b) => b.competitorEngagement - a.competitorEngagement).slice(0, 10),
+          formatMix,
+          dataSufficiency: comparisons.map((c) => ({
+            brand: c.brand, postCount: c.postCount, sufficient: c.sufficient,
+            note: c.sufficient ? null : `僅 ${c.postCount} 條帖子（需 ≥${MIN_POSTS}），未納入深度對比`,
+          })),
+        };
       },
     },
   ];

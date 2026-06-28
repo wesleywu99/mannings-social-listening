@@ -12,6 +12,7 @@ export interface ReportSections {
   kol: string;
   sentiment: string;
   topics: string;
+  competitor: string;
 }
 
 const FALLBACK = '此部分未能生成，請重新生成報告。';
@@ -61,11 +62,11 @@ async function fetchBreakoutSamples(
 async function buildContext(scope: Scope): Promise<string> {
   const tools = Object.fromEntries(buildTools(scope).map((t) => [t.name, t]));
 
-  // 第一波：並行取所有聚合統計 + 帖子樣本 + 話題分析
+  // 第一波：並行取所有聚合統計 + 帖子樣本 + 話題分析 + 競品對比
   const [
     engagement, platformStats, mediaStats,
     trend, creators, sentiment,
-    topSamples, negSamples, topicData,
+    topSamples, negSamples, topicData, competitorData,
   ] = await Promise.all([
     tools.engagement_stats.run({ group_by: 'overall' }),
     tools.engagement_stats.run({ group_by: 'platform' }),
@@ -76,6 +77,7 @@ async function buildContext(scope: Scope): Promise<string> {
     tools.content_samples.run({ sort_by: 'engagement', limit: 15 }) as Promise<Sample[]>,
     tools.content_samples.run({ sentiment: 'neg', sort_by: 'engagement', limit: 10 }) as Promise<Sample[]>,
     tools.topic_analysis.run({}),
+    tools.competitor_benchmark.run({}),
   ]);
 
   // 統計段落
@@ -88,6 +90,12 @@ async function buildContext(scope: Scope): Promise<string> {
     `【情感輿情】${JSON.stringify(sentiment)}`,
     `【話題分析】${JSON.stringify(topicData)}`,
   ];
+
+  // 競品對比（無數據時不加入，AI 會自動跳過該段）
+  const compData = competitorData as { error?: string };
+  if (!compData?.error) {
+    parts.push(`【競品對比】${JSON.stringify(competitorData)}`);
+  }
 
   // 帖子原文段落（讓 AI 能分析實際內容，而非只看統計數字）
   if (topSamples.length > 0) {
@@ -122,7 +130,7 @@ async function buildContext(scope: Scope): Promise<string> {
 
 function parseSections(text: string): ReportSections {
   const keys: (keyof ReportSections)[] = [
-    'summary', 'advice', 'content', 'platform', 'kol', 'sentiment', 'topics',
+    'summary', 'advice', 'content', 'platform', 'kol', 'sentiment', 'topics', 'competitor',
   ];
   const out = {} as ReportSections;
   for (const k of keys) {
@@ -133,7 +141,7 @@ function parseSections(text: string): ReportSections {
   return out;
 }
 
-/** 生成完整日報（SOP：工具取數 → 單次 AI → 解析 7 段） */
+/** 生成完整日報（SOP：工具取數 → 單次 AI → 解析 8 段） */
 export async function runReport(scope: Scope): Promise<ReportSections> {
   const ctx = await buildContext(scope);
   const res = await chatCompletion({
@@ -142,7 +150,7 @@ export async function runReport(scope: Scope): Promise<ReportSections> {
       { role: 'system', content: REPORT_SYSTEM_PROMPT },
       { role: 'user', content: ctx },
     ],
-    maxTokens: 4200,
+    maxTokens: 4800,
   });
   return parseSections(res.content ?? '');
 }

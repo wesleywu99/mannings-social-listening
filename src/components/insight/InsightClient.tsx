@@ -1,13 +1,14 @@
 'use client';
 import { useEffect, useState, type ReactNode } from 'react';
-import { DEFAULT_BRAND } from '@/lib/config';
 import { AIText } from '@/components/monitor/aiText';
 import { MiniKpis, MiniBars, CreatorList } from './MiniViz';
 import { Heatmap } from './Heatmap';
 
+interface BrandRow { name: string; is_own: boolean }
+
 interface Report {
   summary: string; advice: string; content: string; platform: string; kol: string;
-  sentiment: string; topics: string;
+  sentiment: string; topics: string; competitor: string;
   dateStart?: string; dateEnd?: string; generatedAt?: string;
 }
 interface Grp { group: string; postCount: number; totalEngagement: number; avgEngagement: number }
@@ -30,6 +31,7 @@ const SECTIONS: { key: keyof Report; num: string; title: string }[] = [
   { key: 'kol', num: '05', title: '創作者表現亮點' },
   { key: 'sentiment', num: '06', title: '情感輿情' },
   { key: 'topics', num: '07', title: '話題分析' },
+  { key: 'competitor', num: '08', title: '競品態勢' },
 ];
 const PNAME: Record<string, string> = { ig: 'Instagram', threads: 'Threads', fb: 'Facebook' };
 
@@ -115,37 +117,54 @@ function leftFor(key: keyof Report, stats: Stats | null): { title: string; node:
 }
 
 export function InsightClient() {
+  const [brands, setBrands] = useState<BrandRow[]>([]);
+  const [brand, setBrand] = useState('');
   const [report, setReport] = useState<Report | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 載入品牌列表，預設選第一個自有品牌
   useEffect(() => {
-    fetch(`/api/report?brand=${encodeURIComponent(DEFAULT_BRAND)}`)
+    fetch('/api/data/brands')
+      .then((r) => r.json())
+      .then((rows: BrandRow[]) => {
+        setBrands(rows);
+        const own = rows.find((b) => b.is_own);
+        setBrand(own?.name ?? rows[0]?.name ?? '');
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  // 品牌確定後，載入最新報告
+  useEffect(() => {
+    if (!brand) return;
+    fetch(`/api/report?brand=${encodeURIComponent(brand)}`)
       .then((r) => r.json())
       .then((d) => setReport(d && !d.error ? d : null))
       .catch(() => setReport(null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [brand]);
 
   // 報告期間決定後，抓對應的聚合數據給各模塊左側圖表
   useEffect(() => {
-    if (!report?.dateStart || !report?.dateEnd) { setStats(null); return; }
-    const qs = new URLSearchParams({ brand: DEFAULT_BRAND, start: report.dateStart, end: report.dateEnd });
+    if (!report?.dateStart || !report?.dateEnd || !brand) { setStats(null); return; }
+    const qs = new URLSearchParams({ brand, start: report.dateStart, end: report.dateEnd });
     fetch(`/api/data/report-stats?${qs}`)
       .then((r) => r.json())
       .then((d) => setStats(d && !d.error ? d : null))
       .catch(() => setStats(null));
-  }, [report?.dateStart, report?.dateEnd]);
+  }, [brand, report?.dateStart, report?.dateEnd]);
 
   const regenerate = async () => {
+    if (!brand) return;
     setGenerating(true);
     setError(null);
     try {
       const res = await fetch('/api/report', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scope: { brand: DEFAULT_BRAND } }),
+        body: JSON.stringify({ scope: { brand } }),
       });
       const d = await res.json();
       if (d.error) setError(d.error); else setReport(d);
@@ -159,14 +178,27 @@ export function InsightClient() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <p className="text-xs text-on-surface-variant/60">
-          {report?.generatedAt
-            ? `報告期間 ${report.dateStart} ~ ${report.dateEnd} · 生成於 ${new Date(report.generatedAt).toLocaleString()}`
-            : '尚未生成報告'}
-        </p>
+        <div className="flex items-center gap-3">
+          {brands.length > 1 && (
+            <select
+              value={brand}
+              onChange={(e) => { setBrand(e.target.value); setReport(null); setStats(null); setLoading(true); }}
+              className="h-9 px-3 rounded-md border border-outline-variant bg-surface text-sm text-on-surface outline-none focus:border-on-surface/40 transition-colors"
+            >
+              {brands.map((b) => (
+                <option key={b.name} value={b.name}>{b.name}{b.is_own ? '（自有）' : ''}</option>
+              ))}
+            </select>
+          )}
+          <p className="text-xs text-on-surface-variant/60">
+            {report?.generatedAt
+              ? `報告期間 ${report.dateStart} ~ ${report.dateEnd} · 生成於 ${new Date(report.generatedAt).toLocaleString()}`
+              : '尚未生成報告'}
+          </p>
+        </div>
         <button
           onClick={regenerate}
-          disabled={generating}
+          disabled={generating || !brand}
           className="inline-flex items-center h-9 px-4 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:bg-ai-hover transition-colors disabled:opacity-50"
         >
           {generating ? '生成中…（約 20–40 秒）' : report ? '重新生成報告' : '生成報告'}
@@ -176,7 +208,7 @@ export function InsightClient() {
       {error && <div className="bg-sentiment-neg/10 text-sentiment-neg text-sm rounded-xl px-4 py-3">生成失敗：{error}</div>}
       {loading && (
         <div className="space-y-5">
-          {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
             <section key={i} className="bg-surface rounded-2xl border border-outline-variant card-shadow overflow-hidden">
               <div className="px-7 py-4 flex items-center gap-3 border-b border-outline-variant/60">
                 <span className="inline-block h-3 w-6 rounded bg-surface-container animate-pulse" />
@@ -221,11 +253,11 @@ export function InsightClient() {
             );
           })}
 
-          {/* 08 發文時段熱度（純數據模塊，全寬）*/}
+          {/* 09 發文時段熱度（純數據模塊，全寬）*/}
           {stats?.heatmap && stats.heatmap.max > 0 && (
             <section className="bg-surface rounded-2xl border border-outline-variant card-shadow overflow-hidden">
               <div className="px-7 py-4 flex items-center gap-3 border-b border-outline-variant/60">
-                <span className="font-mono text-xs font-semibold text-on-surface-variant/40 tracking-widest">08</span>
+                <span className="font-mono text-xs font-semibold text-on-surface-variant/40 tracking-widest">09</span>
                 <h2 className="text-base font-semibold text-on-surface">發文時段熱度</h2>
                 <span className="text-[11px] text-on-surface-variant/50 ml-1">三平台合計，每格 = 該時段平均互動量</span>
               </div>

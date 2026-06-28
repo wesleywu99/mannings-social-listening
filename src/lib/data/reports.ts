@@ -28,7 +28,7 @@ export async function saveReport(brand: string, dateStart: string, dateEnd: stri
     brand, date_start: dateStart, date_end: dateEnd,
     summary: s.summary, advice: s.advice, content: s.content,
     platform: s.platform, kol: s.kol,
-    sentiment: s.sentiment, topics: s.topics,
+    sentiment: s.sentiment, topics: s.topics, competitor: s.competitor,
     generated_at: new Date().toISOString(),
   }, { onConflict: 'brand,date_start,date_end' });
   if (error) throw error;
@@ -45,6 +45,6 @@ export async function getLatestReport(brand: string): Promise<StoredReport | nul
     brand: r.brand, dateStart: r.date_start, dateEnd: r.date_end, generatedAt: r.generated_at,
     summary: r.summary ?? '', advice: r.advice ?? '', content: r.content ?? '',
     platform: r.platform ?? '', kol: r.kol ?? '',
-    sentiment: r.sentiment ?? '', topics: r.topics ?? '',
+    sentiment: r.sentiment ?? '', topics: r.topics ?? '', competitor: r.competitor ?? '',
   };
 }
