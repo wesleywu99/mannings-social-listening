@@ -114,6 +114,26 @@ describe('renderDigest', () => {
     expect(html).toContain('優惠碼失效投訴');
   });
 
+  it('帶 signals → 顯示狀態燈、決策簡報、完整數據分區', () => {
+    const d = buildDigest([mkPost({ eng: 10, sentiment: 'pos' })], [], '今日');
+    const html = renderDigest(d, {
+      appUrl: 'https://app.example',
+      signals: [{ kind: 'topic', severity: 'act', title: '「優惠碼」討論升溫', detail: '昨日 5 則', action: '客服跟進' }],
+    });
+    expect(html).toContain('今日狀態：需行動');   // act → 紅燈
+    expect(html).toContain('今天值得你知道的');
+    expect(html).toContain('「優惠碼」討論升溫');
+    expect(html).toContain('客服跟進');
+    expect(html).toContain('完整數據');
+  });
+
+  it('無 signals（平靜日）→ 綠燈 + 一切正常', () => {
+    const d = buildDigest([mkPost({ eng: 10, sentiment: 'pos' })], [], '今日');
+    const html = renderDigest(d, { appUrl: 'https://app.example', signals: [] });
+    expect(html).toContain('今日狀態：正常');
+    expect(html).toContain('一切正常');
+  });
+
   it('跳脫 HTML，避免貼文內容與洞察文字注入', () => {
     const d = buildDigest([mkPost({ eng: 10, content: '<script>x</script>' })], [], '今日');
     const html = renderDigest(d, { appUrl: 'https://app.example', insight: { discussion: ['<b>hi</b>'], winningContent: [], takeaway: '', risk: null } });

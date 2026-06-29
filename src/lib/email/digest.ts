@@ -1,5 +1,6 @@
 import type { Post, Platform } from '@/lib/domain/types';
 import type { DigestInsight } from './insight';
+import { statusFromSignals, type Signal } from '@/lib/domain/signals';
 
 const PNAME: Record<Platform, string> = { ig: 'Instagram', threads: 'Threads', fb: 'Facebook' };
 const ORDER: Platform[] = ['ig', 'threads', 'fb'];
@@ -45,6 +46,13 @@ export function hkDayRangeUTC(hkDate: string): { start: string; end: string } {
     start: new Date(`${hkDate}T00:00:00.000${HK}`).toISOString(),
     end: new Date(`${hkDate}T23:59:59.999${HK}`).toISOString(),
   };
+}
+
+/** 把貼文依港時日期分桶（供基準/異常偵測取多日資料） */
+export function groupPostsByHkDay(posts: Post[]): Record<string, Post[]> {
+  const out: Record<string, Post[]> = {};
+  for (const p of posts) { const d = hkDateOf(p.postTime); (out[d] ??= []).push(p); }
+  return out;
 }
 
 /** 'YYYY-MM-DD'（港時）→ 顯示用標籤，如「2026年4月25日（週五）」 */
@@ -142,10 +150,43 @@ function renderInsight(ins: DigestInsight): string {
   </td></tr>`;
 }
 
+const STATUS_COLOR = { green: '#16a34a', yellow: '#d97706', red: '#dc2626' };
+const SEV_STYLE: Record<Signal['severity'], { bd: string; bg: string; tag: string; tc: string }> = {
+  act: { bd: '#dc2626', bg: '#fef2f2', tag: '需行動', tc: '#b42318' },
+  watch: { bd: '#d97706', bg: '#fffbeb', tag: '留意', tc: '#92400e' },
+  info: { bd: '#9ca3af', bg: '#f9fafb', tag: '參考', tc: '#4b5563' },
+};
+
+/** 決策簡報：只列偏離常態的信號（決定 + 為什麼 + 行動）。空＝今日無異常。 */
+function renderBrief(signals: Signal[]): string {
+  if (!signals.length) {
+    return `<tr><td style="padding:6px 24px 8px"><div style="font-size:14px;color:#16a34a;font-weight:600">🟢 一切正常 —— 聲量、情感與各平台都在常態範圍。</div></td></tr>`;
+  }
+  const cards = signals.map((s) => {
+    const c = SEV_STYLE[s.severity];
+    const links = s.evidence?.postUrls?.length
+      ? ` <a href="${s.evidence.postUrls[0]}" style="color:#0070f3;text-decoration:none;font-size:12px;font-weight:600">〔看貼文〕</a>` : '';
+    const actionLine = s.action
+      ? `<div style="font-size:13px;color:#171717;font-weight:600;line-height:1.6;margin-top:5px">→ ${esc(s.action)}${links}</div>`
+      : (links ? `<div style="margin-top:5px">${links}</div>` : '');
+    return `<div style="border:1px solid #ededed;border-left:3px solid ${c.bd};background:${c.bg};border-radius:8px;padding:11px 13px;margin-bottom:8px">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.04em;color:${c.tc}">${c.tag}</div>
+      <div style="font-size:14px;font-weight:600;color:#171717;margin-top:3px">${esc(s.title)}</div>
+      <div style="font-size:13px;color:#4d4d4d;line-height:1.6;margin-top:3px">${esc(s.detail)}</div>
+      ${actionLine}
+    </div>`;
+  }).join('');
+  return `<tr><td style="padding:8px 24px 4px">
+    <div style="${LABEL};margin-bottom:8px">今天值得你知道的</div>${cards}
+  </td></tr>`;
+}
+
 export function renderDigest(
   d: DigestData,
-  opts: { appUrl: string; insight?: DigestInsight | null; charts?: { sentiment?: boolean; platform?: boolean } },
+  opts: { appUrl: string; insight?: DigestInsight | null; charts?: { sentiment?: boolean; platform?: boolean }; signals?: Signal[] },
 ): string {
+  const signals = opts.signals ?? [];
+  const status = statusFromSignals(signals);
   const SENT = [
     { label: '正向', color: SENTIMENT_COLOR.pos, v: d.sentiment.pos },
     { label: '中性', color: SENTIMENT_COLOR.neu, v: d.sentiment.neu },
@@ -202,19 +243,22 @@ export function renderDigest(
       <tr><td style="padding:22px 24px;background:#171717">
         <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9aa0a6">Mannings · Daily Digest</div>
         <div style="font-size:18px;font-weight:600;color:#fff;margin-top:4px">${d.dayLabel}</div>
+        <div style="margin-top:10px"><span style="display:inline-block;background:${STATUS_COLOR[status.level]};color:#fff;font-size:12px;font-weight:700;padding:3px 11px;border-radius:999px">今日狀態：${status.label}</span></div>
       </td></tr>
-      <tr><td style="padding:18px 24px 4px">
-        <div style="font-size:15px;line-height:1.6;color:#171717;font-weight:500">${esc(d.verdict)}</div>
+      <tr><td style="padding:16px 24px 2px">
+        <div style="font-size:14px;line-height:1.6;color:#6b6b6b">${esc(d.verdict)}</div>
       </td></tr>
-      ${opts.insight ? renderInsight(opts.insight) : ''}
+      ${d.hasData ? renderBrief(signals) : ''}
       ${d.hasData ? `
-      <tr><td style="padding:12px 16px"><table width="100%" cellpadding="0" cellspacing="0"><tr>
+      <tr><td style="padding:16px 24px 0"><div style="border-top:1px solid #ededed;padding-top:14px;${LABEL}">完整數據</div></td></tr>
+      <tr><td style="padding:10px 16px 0"><table width="100%" cellpadding="0" cellspacing="0"><tr>
         ${kpi('貼文數', d.posts.toLocaleString(), d.deltaPosts)}
         ${kpi('總互動', d.engagement.toLocaleString(), d.deltaEng)}
       </tr></table></td></tr>
       ${hasSent ? section('情感分佈', sentPanel) : ''}
       ${d.platforms.length ? section('各平台互動聲量', platPanel) : ''}
       <tr><td style="padding:4px 24px 8px">${topHtml}</td></tr>
+      ${opts.insight ? renderInsight(opts.insight) : ''}
       ` : ''}
       <tr><td style="padding:18px 24px;border-top:1px solid #ebebeb;background:#fafafa">
         <a href="${opts.appUrl}/monitor?token=mannings" style="color:#0070f3;font-size:13px;text-decoration:none;font-weight:600">→ 開啟完整看板</a>

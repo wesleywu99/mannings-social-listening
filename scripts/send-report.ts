@@ -1,10 +1,15 @@
 import { config } from 'dotenv'; config({ path: '.env.local' });
 import { createClient } from '@supabase/supabase-js';
 import { sendMail } from '../src/lib/email/gmail';
-import { buildDigest, renderDigest, hkDayRangeUTC, hkDateOf, yesterdayHK, dayLabelHK } from '../src/lib/email/digest';
+import { buildDigest, renderDigest, hkDayRangeUTC, hkDateOf, yesterdayHK, dayLabelHK, groupPostsByHkDay } from '../src/lib/email/digest';
 import { buildDigestInsight } from '../src/lib/email/insight';
 import { buildDigestCharts } from '../src/lib/email/charts';
+import { detectSignals } from '../src/lib/domain/signals';
 import type { Post, Platform, PostSource } from '../src/lib/domain/types';
+
+const addHkDays = (date: string, n: number): string => {
+  const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10);
+};
 
 // 用法：npm run send-report [email] [day=YYYY-MM-DD]
 //   email 省略 → 寄給所有訂閱者；day 省略 → 港時昨日（無資料則退回最近一天）
@@ -43,13 +48,15 @@ async function main() {
       if (data?.[0]?.post_time) day = hkDateOf(data[0].post_time as string);
     }
   }
-  const range = hkDayRangeUTC(day);
-  const priorDate = (() => { const d = new Date(`${day}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); })();
-  const priorRange = hkDayRangeUTC(priorDate);
-
-  const [posts, prior] = await Promise.all([fetchDay(range.start, range.end), fetchDay(priorRange.start, priorRange.end)]);
+  // 一次撈「報告日 + 前 7 天」，分桶供基準/異常偵測
+  const all = await fetchDay(hkDayRangeUTC(addHkDays(day, -7)).start, hkDayRangeUTC(day).end);
+  const byDay = groupPostsByHkDay(all);
+  const posts = byDay[day] ?? [];
+  const prior = byDay[addHkDays(day, -1)] ?? [];
+  const baselineDays = Array.from({ length: 7 }, (_, i) => { const dt = addHkDays(day, -(i + 1)); return { date: dt, posts: byDay[dt] ?? [] }; });
   const digest = buildDigest(posts, prior, dayLabelHK(day));
-  console.log(`報告日 ${day}：${digest.posts} 則貼文、${digest.engagement.toLocaleString()} 互動`);
+  const signals = detectSignals(day, posts, baselineDays);
+  console.log(`報告日 ${day}：${digest.posts} 則貼文、${digest.engagement.toLocaleString()} 互動；信號 ${signals.length} 個（${signals.map((x) => `${x.kind}:${x.severity}`).join(', ') || '無異常'}）`);
 
   // 品牌脈絡 → AI 洞察（核心價值）+ 內嵌餅圖
   const { data: brandRow } = await s.from('brands').select('context').eq('name', BRAND).limit(1);
@@ -66,7 +73,7 @@ async function main() {
   }
   if (!recipients.length) { console.error('無收件人（無訂閱者）'); process.exit(1); }
 
-  const html = renderDigest(digest, { appUrl: APP_URL, insight, charts: has });
+  const html = renderDigest(digest, { appUrl: APP_URL, insight, charts: has, signals });
   const subject = `Mannings 每日摘要 · ${day}`;
   let sent = 0;
   for (const to of recipients) {

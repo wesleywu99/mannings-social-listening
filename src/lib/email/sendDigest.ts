@@ -2,10 +2,16 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { queryPosts, getBrandContext } from '@/lib/data/posts';
 import { listSubscribers } from '@/lib/data/subscribers';
 import { sendMail } from './gmail';
-import { buildDigest, renderDigest, hkDayRangeUTC, hkDateOf, yesterdayHK, dayLabelHK } from './digest';
+import { buildDigest, renderDigest, hkDayRangeUTC, hkDateOf, yesterdayHK, dayLabelHK, groupPostsByHkDay } from './digest';
 import { buildDigestInsight } from './insight';
 import { buildDigestCharts } from './charts';
+import { detectSignals } from '@/lib/domain/signals';
 import { DEFAULT_BRAND } from '@/lib/config';
+
+const addHkDays = (date: string, n: number): string => {
+  const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10);
+};
+const BASELINE_DAYS = 7;
 
 export interface DigestResult { day: string; hasData: boolean; total: number; sent: number; failed: string[]; }
 
@@ -35,27 +41,31 @@ export async function sendDigest(
   const nowIso = opts.nowIso ?? new Date().toISOString();
 
   const day = opts.day ?? (await resolveDay(brand, nowIso));
-  const range = hkDayRangeUTC(day);
-  const priorDate = (() => { const d = new Date(`${day}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); })();
-  const priorRange = hkDayRangeUTC(priorDate);
 
-  const [posts, prior] = await Promise.all([
-    queryPosts({ brand, dateStart: range.start, dateEnd: range.end }),
-    queryPosts({ brand, dateStart: priorRange.start, dateEnd: priorRange.end }),
-  ]);
+  // 一次撈「報告日 + 前 7 天」，分桶供基準/異常偵測
+  const winStart = hkDayRangeUTC(addHkDays(day, -BASELINE_DAYS)).start;
+  const winEnd = hkDayRangeUTC(day).end;
+  const all = await queryPosts({ brand, dateStart: winStart, dateEnd: winEnd });
+  const byDay = groupPostsByHkDay(all);
+  const posts = byDay[day] ?? [];
+  const prior = byDay[addHkDays(day, -1)] ?? [];
+  const baselineDays = Array.from({ length: BASELINE_DAYS }, (_, i) => {
+    const dt = addHkDays(day, -(i + 1)); return { date: dt, posts: byDay[dt] ?? [] };
+  });
 
   const data = buildDigest(posts, prior, dayLabelHK(day));
 
   // 空日不主動寄（測試指定 to 時仍寄，方便預覽）
   if (!data.hasData && !opts.to) return { day, hasData: false, total: 0, sent: 0, failed: [] };
 
-  // AI 洞察（核心價值；失敗回 null，不阻擋寄送）+ 內嵌餅圖
+  // 異常偵測（決策簡報核心，確定性）+ AI 洞察（加值，失敗回 null）+ 內嵌餅圖
+  const signals = data.hasData ? detectSignals(day, posts, baselineDays) : [];
   const brandCtx = await getBrandContext(brand);
   const insight = data.hasData ? await buildDigestInsight(posts, brandCtx ? JSON.stringify(brandCtx) : null) : null;
   const { images, has } = buildDigestCharts(data);
 
   const recipients = opts.to ?? (await listSubscribers(brand)).map((s) => s.email);
-  const html = renderDigest(data, { appUrl, insight, charts: has });
+  const html = renderDigest(data, { appUrl, insight, charts: has, signals });
   const subject = `Mannings 每日摘要 · ${day}`;
 
   let sent = 0;
