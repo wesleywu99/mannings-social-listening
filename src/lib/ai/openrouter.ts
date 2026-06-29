@@ -1,6 +1,7 @@
 import type { ChatMessage } from './types';
 
-const ENDPOINT = 'https://token.sensenova.cn/v1/chat/completions';
+// 預設 SenseNova（正式環境）；可用 AI_BASE_URL 覆寫（如本機改用 OpenRouter 測試）
+const ENDPOINT = process.env.AI_BASE_URL || 'https://token.sensenova.cn/v1/chat/completions';
 
 export function getModelHeavy(): string {
   return process.env.AI_MODEL_HEAVY || 'deepseek/deepseek-chat';

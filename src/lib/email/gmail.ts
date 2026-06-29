@@ -12,8 +12,16 @@ function loadCreds(): SACreds {
   return JSON.parse(readFileSync(path, 'utf8')) as SACreds;
 }
 
-/** 用 Gmail API + SA 網域全權委派（模擬 GMAIL_SENDER）寄 HTML 信。 */
-export async function sendMail(to: string | string[], subject: string, html: string): Promise<void> {
+/** 內嵌圖片（CID）：HTML 以 <img src="cid:cid"> 引用，圖片隨信送出（無外部請求） */
+export interface InlineImage { cid: string; content: Buffer; contentType?: string }
+
+// RFC 2045：base64 每 76 字元換行（大附件較保險）
+const b64wrap = (buf: Buffer) => buf.toString('base64').replace(/(.{76})/g, '$1\r\n');
+
+/** 用 Gmail API + SA 網域全權委派（模擬 GMAIL_SENDER）寄 HTML 信，可含內嵌圖片。 */
+export async function sendMail(
+  to: string | string[], subject: string, html: string, images?: InlineImage[],
+): Promise<void> {
   const sender = process.env.GMAIL_SENDER;
   if (!sender) throw new Error('Missing GMAIL_SENDER');
   const creds = loadCreds();
@@ -27,17 +35,34 @@ export async function sendMail(to: string | string[], subject: string, html: str
   const gmail = google.gmail({ version: 'v1', auth });
 
   const recipients = Array.isArray(to) ? to.join(', ') : to;
-  const mime = [
+  const headers = [
     `From: Mannings Social Listening <${sender}>`,
     `To: ${recipients}`,
     `Subject: =?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`,
     'MIME-Version: 1.0',
-    'Content-Type: text/html; charset=UTF-8',
-    'Content-Transfer-Encoding: base64',
-    '',
-    Buffer.from(html, 'utf8').toString('base64'),
-  ].join('\r\n');
-  const raw = Buffer.from(mime, 'utf8').toString('base64url');
+  ];
+  const htmlPart = ['Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', b64wrap(Buffer.from(html, 'utf8'))];
 
+  let mime: string;
+  if (images?.length) {
+    const boundary = `mns-${Date.now().toString(36)}`;
+    const parts: string[] = [`--${boundary}`, ...htmlPart];
+    for (const img of images) {
+      parts.push(
+        `--${boundary}`,
+        `Content-Type: ${img.contentType ?? 'image/png'}`,
+        'Content-Transfer-Encoding: base64',
+        `Content-ID: <${img.cid}>`,
+        `Content-Disposition: inline; filename="${img.cid}.png"`,
+        '', b64wrap(img.content),
+      );
+    }
+    parts.push(`--${boundary}--`, '');
+    mime = [...headers, `Content-Type: multipart/related; boundary="${boundary}"`, '', parts.join('\r\n')].join('\r\n');
+  } else {
+    mime = [...headers, ...htmlPart].join('\r\n');
+  }
+
+  const raw = Buffer.from(mime, 'utf8').toString('base64url');
   await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
 }
