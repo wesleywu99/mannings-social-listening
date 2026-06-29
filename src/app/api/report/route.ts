@@ -27,9 +27,9 @@ export async function POST(req: NextRequest) {
       dateStart = dateStart || r.start;
       dateEnd = dateEnd || r.end;
     }
-    const sections = await runReport({ brand, dateStart, dateEnd });
-    await saveReport(brand, dateStart.slice(0, 10), dateEnd.slice(0, 10), sections);
-    return NextResponse.json({ ...sections, brand, dateStart: dateStart.slice(0, 10), dateEnd: dateEnd.slice(0, 10), generatedAt: new Date().toISOString() });
+    const { sections, topicsData } = await runReport({ brand, dateStart, dateEnd });
+    await saveReport(brand, dateStart.slice(0, 10), dateEnd.slice(0, 10), sections, topicsData);
+    return NextResponse.json({ ...sections, topicsData, brand, dateStart: dateStart.slice(0, 10), dateEnd: dateEnd.slice(0, 10), generatedAt: new Date().toISOString() });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

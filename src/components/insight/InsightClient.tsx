@@ -10,6 +10,7 @@ interface Report {
   summary: string; advice: string; content: string; platform: string; kol: string;
   sentiment: string; topics: string; competitor: string;
   dateStart?: string; dateEnd?: string; generatedAt?: string;
+  topicsData?: Topic[];   // 報告生成時快取的結構化話題（供 07 左側圖，免即時跑 LLM）
 }
 interface Grp { group: string; postCount: number; totalEngagement: number; avgEngagement: number }
 interface Creator { username: string; posts: number; totalEngagement: number; avgEngagement: number; avgFollowers: number }
@@ -20,7 +21,6 @@ interface Stats {
   creators?: { top: Creator[]; darkHorses: Creator[] };
   heatmap?: { matrix: number[][]; max: number; best: { weekday: number; hour: number; avg: number } | null };
   sentiment?: { summary: { posPct: number; neuPct: number; negPct: number; pos: number; neu: number; neg: number }; spikes: { date: string; level: string }[] };
-  topics?: Topic[];
 }
 
 const SECTIONS: { key: keyof Report; num: string; title: string }[] = [
@@ -35,7 +35,27 @@ const SECTIONS: { key: keyof Report; num: string; title: string }[] = [
 ];
 const PNAME: Record<string, string> = { ig: 'Instagram', threads: 'Threads', fb: 'Facebook' };
 
-function leftFor(key: keyof Report, stats: Stats | null): { title: string; node: ReactNode } | null {
+function leftFor(key: keyof Report, stats: Stats | null, report: Report | null): { title: string; node: ReactNode } | null {
+  // 話題圖改讀報告快取（report.topicsData），不依賴即時 stats
+  if (key === 'topics') {
+    const topics = report?.topicsData ?? [];
+    if (!topics.length) return null;
+    const items = topics.slice(0, 8).map((t) => ({ label: t.name, value: t.avgEngagement }));
+    const totalPosts = topics.reduce((s, t) => s + t.postCount, 0);
+    return {
+      title: '話題互動排名',
+      node: (
+        <div className="space-y-3">
+          <MiniBars items={items} />
+          <div className="pt-1.5 border-t border-outline-variant/40">
+            <p className="text-[10px] text-on-surface-variant/50 tabular-nums">
+              共 {topics.length} 個話題 · {totalPosts} 條帖子
+            </p>
+          </div>
+        </div>
+      ),
+    };
+  }
   if (!stats) return null;
   const plat = stats.byPlatform?.groups ?? [];
   if (key === 'summary') {
@@ -90,25 +110,6 @@ function leftFor(key: keyof Report, stats: Stats | null): { title: string; node:
               </div>
             </div>
           )}
-        </div>
-      ),
-    };
-  }
-  if (key === 'topics') {
-    const topics = stats.topics ?? [];
-    if (!topics.length) return null;
-    const items = topics.slice(0, 8).map((t) => ({ label: t.name, value: t.avgEngagement }));
-    const totalPosts = topics.reduce((s, t) => s + t.postCount, 0);
-    return {
-      title: '話題互動排名',
-      node: (
-        <div className="space-y-3">
-          <MiniBars items={items} />
-          <div className="pt-1.5 border-t border-outline-variant/40">
-            <p className="text-[10px] text-on-surface-variant/50 tabular-nums">
-              共 {topics.length} 個話題 · {totalPosts} 條帖子
-            </p>
-          </div>
         </div>
       ),
     };
@@ -230,7 +231,7 @@ export function InsightClient() {
       {report && (
         <div className="space-y-5">
           {SECTIONS.map((s) => {
-            const left = leftFor(s.key, stats);
+            const left = leftFor(s.key, stats, report);
             const body = <div className="text-sm leading-relaxed text-on-surface"><AIText text={(report[s.key] as string) || '—'} /></div>;
             return (
               <section key={s.key} className="bg-surface rounded-2xl border border-outline-variant card-shadow overflow-hidden">

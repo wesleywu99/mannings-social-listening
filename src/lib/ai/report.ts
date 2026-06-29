@@ -3,6 +3,7 @@ import { chatCompletion, getModelHeavy } from './openrouter';
 import { buildTools } from './tools';
 import { REPORT_SYSTEM_PROMPT } from './prompts';
 import type { Scope } from './types';
+import type { Topic } from './topics';
 
 export interface ReportSections {
   summary: string;
@@ -58,8 +59,8 @@ async function fetchBreakoutSamples(
 
 // ─── 報告上下文組裝 ────────────────────────────────────────────────────
 
-/** 用工具組裝確定性數據摘要（SOP），不經 LLM */
-async function buildContext(scope: Scope): Promise<string> {
+/** 用工具組裝確定性數據摘要（SOP）。同時回傳結構化話題分析供快取（避免 Insight 頁重跑 LLM）。 */
+async function buildContext(scope: Scope): Promise<{ context: string; topicsData: Topic[] }> {
   const tools = Object.fromEntries(buildTools(scope).map((t) => [t.name, t]));
 
   // 第一波：並行取所有聚合統計 + 帖子樣本 + 話題分析 + 競品對比
@@ -125,7 +126,7 @@ async function buildContext(scope: Scope): Promise<string> {
     }
   }
 
-  return parts.join('\n\n');
+  return { context: parts.join('\n\n'), topicsData: (topicData as Topic[]) ?? [] };
 }
 
 function parseSections(text: string): ReportSections {
@@ -141,16 +142,16 @@ function parseSections(text: string): ReportSections {
   return out;
 }
 
-/** 生成完整日報（SOP：工具取數 → 單次 AI → 解析 8 段） */
-export async function runReport(scope: Scope): Promise<ReportSections> {
-  const ctx = await buildContext(scope);
+/** 生成完整日報（SOP：工具取數 → 單次 AI → 解析 8 段）。一併回傳結構化話題供快取。 */
+export async function runReport(scope: Scope): Promise<{ sections: ReportSections; topicsData: Topic[] }> {
+  const { context, topicsData } = await buildContext(scope);
   const res = await chatCompletion({
     model: getModelHeavy(),
     messages: [
       { role: 'system', content: REPORT_SYSTEM_PROMPT },
-      { role: 'user', content: ctx },
+      { role: 'user', content: context },
     ],
     maxTokens: 4800,
   });
-  return parseSections(res.content ?? '');
+  return { sections: parseSections(res.content ?? ''), topicsData };
 }

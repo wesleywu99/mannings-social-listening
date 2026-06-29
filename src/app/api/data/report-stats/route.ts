@@ -17,22 +17,21 @@ export async function GET(req: NextRequest) {
   };
   try {
     const tools = Object.fromEntries(buildTools(scope).map((t) => [t.name, t]));
-    const [byPlatformStats, creators, sentiment, allPosts, topics] = await Promise.all([
+    // 全部為確定性計算（不含 LLM）。話題分析改由報告生成時快取（report.topicsData），此處不再即時跑 topic_analysis，避免每次載入都呼叫 AI。
+    const [byPlatformStats, byMedia, creators, sentiment, allPosts] = await Promise.all([
       tools.engagement_stats.run({ group_by: 'platform' }),
+      tools.engagement_stats.run({ group_by: 'media_type' }),
       tools.creator_ranking.run({ limit: 5 }),
       tools.sentiment_analysis.run({}),
       queryPosts({ brand: scope.brand, dateStart: scope.dateStart, dateEnd: scope.dateEnd }),
-      tools.topic_analysis.run({}),
     ]);
     const heatmap = computeHeatmap(allPosts);
-    const byMedia = await tools.engagement_stats.run({ group_by: 'media_type' });
     return NextResponse.json({
       byPlatform: byPlatformStats,
       byMedia,
       creators,
       heatmap,
       sentiment,
-      topics,
     });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
