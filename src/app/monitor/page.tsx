@@ -1,5 +1,6 @@
 import { MonitorClient } from '@/components/monitor/MonitorClient';
 import { Nav } from '@/components/Nav';
+import { SubscribeButton } from '@/components/SubscribeButton';
 
 export default function MonitorPage() {
   return (
@@ -9,7 +10,10 @@ export default function MonitorPage() {
           <h1 className="text-[2rem] leading-tight font-semibold tracking-[-0.04em] text-on-surface">Analytics Dashboard</h1>
           <p className="text-sm text-on-surface-variant mt-1.5">Social media monitoring and competitor analysis.</p>
         </div>
-        <Nav />
+        <div className="flex items-center gap-2">
+          <SubscribeButton />
+          <Nav />
+        </div>
       </header>
       <MonitorClient />
     </main>

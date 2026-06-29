@@ -1,4 +1,5 @@
 import { Nav } from '@/components/Nav';
+import { SubscribeButton } from '@/components/SubscribeButton';
 import { InsightClient } from '@/components/insight/InsightClient';
 
 export default function InsightPage() {
@@ -9,7 +10,10 @@ export default function InsightPage() {
           <h1 className="text-[2rem] leading-tight font-semibold tracking-[-0.04em] text-on-surface">AI Insight Center</h1>
           <p className="text-sm text-on-surface-variant mt-1.5">Deep social listening analysis and decision support.</p>
         </div>
-        <Nav />
+        <div className="flex items-center gap-2">
+          <SubscribeButton />
+          <Nav />
+        </div>
       </header>
       <InsightClient />
     </main>
