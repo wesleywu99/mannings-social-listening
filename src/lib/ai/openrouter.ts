@@ -17,6 +17,8 @@ interface CompletionOpts {
   toolChoice?: 'auto' | 'required' | 'none';
   temperature?: number;
   maxTokens?: number;
+  // 關閉推理模型的 thinking（deepseek-v4-flash 等）：結構化/JSON 任務用，省 token、快、避免推理吃光額度導致 content 被截斷
+  disableThinking?: boolean;
 }
 
 export interface CompletionResult {
@@ -35,6 +37,7 @@ export async function chatCompletion(opts: CompletionOpts): Promise<CompletionRe
     temperature: opts.temperature ?? 0.7,
     max_tokens: opts.maxTokens ?? 4096,
   };
+  if (opts.disableThinking) body.thinking = { type: 'disabled' };
   if (opts.tools?.length) {
     body.tools = opts.tools;
     // SenseNova 不支援 tool_choice:'required'（回 502001），僅用 'auto'

@@ -58,6 +58,7 @@ export async function buildDigestInsight(
       ],
       temperature: 0.3,
       maxTokens: 1200,
+      disableThinking: true,   // 結構化 JSON 洞察：關 thinking 求穩與速度
     });
 
     const text = (res.content ?? '').trim();

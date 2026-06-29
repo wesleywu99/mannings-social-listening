@@ -136,7 +136,8 @@ export async function analyzeTopics(
       { role: 'user', content: `貼文清單（共 ${items.length} 條）：\n${JSON.stringify(items)}` },
     ],
     temperature: 0.2,
-    maxTokens: 2000,
+    maxTokens: 3000,
+    disableThinking: true,   // 結構化 JSON 任務：關 thinking，避免推理吃光額度導致 content 為空（→ topics 回 []）
   });
 
   const text = (res.content ?? '').trim();

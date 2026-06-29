@@ -152,6 +152,7 @@ export async function runReport(scope: Scope): Promise<{ sections: ReportSection
       { role: 'user', content: context },
     ],
     maxTokens: 4800,
+    disableThinking: true,   // 一次性結構化 8 段報告：關 thinking 求穩與速度（推理不外露）
   });
   return { sections: parseSections(res.content ?? ''), topicsData };
 }
